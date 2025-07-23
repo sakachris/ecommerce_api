@@ -1,1 +1,1 @@
-# ecommerce_api
+# E-commerce Product Catalogue API
