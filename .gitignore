@@ -1,0 +1,8 @@
+.ecom/
+__pycache__/
+*.py[cod]
+*.sqlite3
+env/
+*.env
+/static/
+/media/
