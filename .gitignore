@@ -6,3 +6,4 @@ env/
 *.env
 /static/
 /media/
+reset_db.sh
