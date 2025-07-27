@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import environ
 import os
+from datetime import timedelta
 
 # Initialise environment variables
 env = environ.Env()
@@ -26,6 +27,13 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS')
+
+CSRF_TRUSTED_ORIGINS= env.list("CSRF_TRUSTED_ORIGINS")
+CORS_ALLOWED_ORIGINS= env.list("CORS_ALLOWED_ORIGINS")
+
+SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN", default=None)
+CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default=None)
+CORS_ALLOW_ALL_ORIGINS = True
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -41,14 +49,47 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',
     'drf_yasg',
     'catalogue',
 ]
+
+AUTH_USER_MODEL = 'catalogue.User'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '200/min',
+        'anon': '50/min',
+    },
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'user_id',
+    'USER_ID_CLAIM': 'user_id',
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -124,9 +165,85 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "/static/"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# Optional compression support
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': False,
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Format: **Bearer &lt;access_token&gt;**',
+        }
+    },
+}
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = env('EMAIL_HOST')
+EMAIL_PORT = env.int('EMAIL_PORT')
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS')
+EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
+
+# Celery Config
+CELERY_BROKER_URL = 'amqp://localhost'  # RabbitMQ URL
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
+CELERY_TASK_ALWAYS_EAGER = False  # True only for local debugging
+CELERY_TIMEZONE = 'Africa/Nairobi'
+# RabbitMQ
+# CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+# CELERY_RESULT_BACKEND=rpc://
+CELERY_TASK_QUEUES = {
+    'ecommerce': {
+        'exchange': 'ecommerce',
+        'routing_key': 'ecommerce',
+    }
+}
+
+# Celery broker (RabbitMQ)
+# CELERY_BROKER_URL = 'amqp://guest:guest@localhost:5672//'
+
+# Celery result backend (Redis)
+# CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+
+REDIS_URL = env('REDIS_URL', default='redis://127.0.0.1:6379/0')
+
+# Django cache (Redis)
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/2",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+# Django session store (Redis)
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
+EMAIL_VERIFICATION_TOKEN_LIFETIME = timedelta(
+    hours=env.int('EMAIL_VERIFICATION_TOKEN_HOURS', default=24)
+)
+PASSWORD_RESET_TOKEN_LIFETIME = timedelta(
+    minutes=env.int('PASSWORD_RESET_TOKEN_MINUTES', default=30)
+)
+
+PUBLIC_BASE_URL = env('PUBLIC_BASE_URL', default='http://127.0.0.1:8000')
