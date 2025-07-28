@@ -33,7 +33,7 @@ CORS_ALLOWED_ORIGINS= env.list("CORS_ALLOWED_ORIGINS")
 
 SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN", default=None)
 CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default=None)
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_ALL_ORIGINS = True
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -191,6 +191,7 @@ SWAGGER_SETTINGS = {
             'description': 'Format: **Bearer &lt;access_token&gt;**',
         }
     },
+    'DEFAULT_API_URL': 'https://ecom.sakachris.com',
 }
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -251,3 +252,8 @@ PASSWORD_RESET_TOKEN_LIFETIME = timedelta(
 )
 
 PUBLIC_BASE_URL = env('PUBLIC_BASE_URL', default='http://127.0.0.1:8000')
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
