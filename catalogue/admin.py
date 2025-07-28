@@ -1,7 +1,7 @@
 # catalogue/admin.py
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, UserRole
+from .models import User, Category, Product, ProductImage
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -32,3 +32,33 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('email', 'first_name', 'last_name', 'password1', 'password2', 'role', 'is_staff', 'is_superuser'),
         }),
     )
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'description', 'created_at', 'updated_at')
+    search_fields = ('name',)
+    ordering = ('-created_at',)
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ('name', 'category', 'price', 'stock_quantity', 'created_at', 'updated_at')
+    list_filter = ('category',)
+    search_fields = ('name',)
+    ordering = ('-created_at',)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return self.readonly_fields + ('created_at', 'updated_at')
+        return self.readonly_fields
+    
+@admin.register(ProductImage)
+class ProductImageAdmin(admin.ModelAdmin):
+    list_display = ('product', 'image_url', 'is_primary', 'created_at')
+    list_filter = ('is_primary',)
+    search_fields = ('product__name',)
+    ordering = ('-created_at',)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return self.readonly_fields + ('created_at',)
+        return self.readonly_fields
