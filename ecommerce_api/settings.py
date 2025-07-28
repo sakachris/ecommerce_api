@@ -15,9 +15,7 @@ import environ
 import os
 from datetime import timedelta
 
-# Initialise environment variables
 env = environ.Env()
-# environ.Env.read_env()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,6 +32,15 @@ CORS_ALLOWED_ORIGINS= env.list("CORS_ALLOWED_ORIGINS")
 SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN", default=None)
 CSRF_COOKIE_DOMAIN = env("CSRF_COOKIE_DOMAIN", default=None)
 # CORS_ALLOW_ALL_ORIGINS = True
+
+
+SECURE_PROXY_SSL_HEADER = env.tuple('SECURE_PROXY_SSL_HEADER', default=None)
+
+SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+PUBLIC_BASE_URL = env('PUBLIC_BASE_URL', default='http://127.0.0.1:8000')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -191,7 +198,7 @@ SWAGGER_SETTINGS = {
             'description': 'Format: **Bearer &lt;access_token&gt;**',
         }
     },
-    'DEFAULT_API_URL': 'https://ecom.sakachris.com',
+    'DEFAULT_API_URL': env('PUBLIC_BASE_URL', default='http://127.0.0.1:8000'),
 }
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -206,12 +213,8 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
 CELERY_BROKER_URL = 'amqp://localhost'  # RabbitMQ URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
-
 CELERY_TASK_ALWAYS_EAGER = False  # True only for local debugging
 CELERY_TIMEZONE = 'Africa/Nairobi'
-# RabbitMQ
-# CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
-# CELERY_RESULT_BACKEND=rpc://
 CELERY_TASK_QUEUES = {
     'ecommerce': {
         'exchange': 'ecommerce',
@@ -219,17 +222,8 @@ CELERY_TASK_QUEUES = {
     }
 }
 
-# Celery broker (RabbitMQ)
-# CELERY_BROKER_URL = 'amqp://guest:guest@localhost:5672//'
-
-# Celery result backend (Redis)
-# CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
-
 REDIS_URL = env('REDIS_URL', default='redis://127.0.0.1:6379/0')
-
-# Django cache (Redis)
 REDIS_HOST = env('REDIS_HOST', default='127.0.0.1')
-
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -250,10 +244,3 @@ EMAIL_VERIFICATION_TOKEN_LIFETIME = timedelta(
 PASSWORD_RESET_TOKEN_LIFETIME = timedelta(
     minutes=env.int('PASSWORD_RESET_TOKEN_MINUTES', default=30)
 )
-
-PUBLIC_BASE_URL = env('PUBLIC_BASE_URL', default='http://127.0.0.1:8000')
-
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
