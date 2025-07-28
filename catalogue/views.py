@@ -28,6 +28,24 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = RegisterSerializer
 
+    @swagger_auto_schema(
+        operation_summary="Register a new user",
+        operation_description="Create a new user account and send a verification email.",
+        tags=["Auth - Registration"],
+        request_body=RegisterSerializer,
+        responses={
+            201: openapi.Response(
+                description="User registered successfully. Verification email sent.",
+                schema=DetailResponseSerializer,
+                examples={"application/json": {"detail": "User registered successfully. Verification email sent."}}
+            ),
+            400: openapi.Response(
+                description="Bad request, validation errors.",
+                schema=DetailResponseSerializer,
+                examples={"application/json": {"detail": "A user with that email already exists."}}
+            ),
+        }
+    )
     def perform_create(self, serializer):
         user = serializer.save()
         token = EmailVerificationToken.for_user(user)
@@ -124,6 +142,22 @@ class MeView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = (permissions.IsAuthenticated,)
 
+    @swagger_auto_schema(
+        operation_summary="Get authenticated user profile",
+        operation_description="Retrieve the profile of the authenticated user.",
+        tags=["Auth - User Profile"],
+        responses={
+            200: openapi.Response(
+                description="User profile retrieved successfully.",
+                schema=UserSerializer,
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided.",
+                schema=DetailResponseSerializer,
+                examples={"application/json": {"detail": "Authentication credentials were not provided."}}
+            ),
+        }
+    )
     def get_object(self):
         return self.request.user
 
