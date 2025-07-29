@@ -12,11 +12,13 @@ from .views import (
     PasswordResetConfirmView,
     CategoryViewSet,
     ProductViewSet,
+    ProductImageViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"categories", CategoryViewSet, basename="categories")
 router.register(r"products", ProductViewSet, basename="products")
+router.register(r"product-images", ProductImageViewSet, basename="productimage")
 
 urlpatterns = [
     # Auth

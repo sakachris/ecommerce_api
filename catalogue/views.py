@@ -2,6 +2,7 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAdminUser
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import AllowAny
 from .serializers import (
@@ -15,8 +16,7 @@ from .serializers import (
     ProductImageSerializer,
     ProductListSerializer,
     ProductDetailSerializer,
-    CategoryListSerializer,
-    CategoryDetailSerializer,
+    CategorySerializer,
 )
 from django.conf import settings
 from django.urls import reverse
@@ -29,9 +29,13 @@ from drf_yasg import openapi
 from .redis_token_store import RedisTokenStore
 from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Category, Product
+from .models import Category, Product, ProductImage
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from .permissions import IsAdminOrReadOnly
+from ecommerce_api.pagination.custom import ProductPagination, CategoryPagination, ProductImagePagination
+
+from rest_framework import status
+from rest_framework.decorators import action
 
 
 User = get_user_model()
@@ -488,18 +492,12 @@ class PasswordResetConfirmView(APIView):
         )
 
 
-# class CategoryViewSet(viewsets.ModelViewSet):
-#     queryset = Category.objects.all()
-#     serializer_class = CategorySerializer
-#     filter_backends = [filters.SearchFilter]
-#     search_fields = ["name"]
-
-
 # class ProductViewSet(viewsets.ModelViewSet):
 #     queryset = (
-#         Product.objects.select_related("category").prefetch_related("images").all()
+#         Product.objects.all().select_related("category").prefetch_related("images")
 #     )
-#     serializer_class = ProductSerializer
+#     serializer_class = ProductDetailSerializer
+#     permission_classes = [IsAdminOrReadOnly]
 #     filter_backends = [
 #         DjangoFilterBackend,
 #         filters.SearchFilter,
@@ -509,12 +507,16 @@ class PasswordResetConfirmView(APIView):
 #     search_fields = ["name", "description"]
 #     ordering_fields = ["price", "created_at"]
 #     ordering = ["-created_at"]
+#     pagination_class = ProductPagination
+
+#     def get_serializer_class(self):
+#         if self.action == "list":
+#             return ProductListSerializer
+#         return ProductDetailSerializer
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = (
-        Product.objects.all().select_related("category").prefetch_related("images")
-    )
+    queryset = Product.objects.all().select_related("category").prefetch_related("images")
     serializer_class = ProductDetailSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [
@@ -526,12 +528,40 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ["name", "description"]
     ordering_fields = ["price", "created_at"]
     ordering = ["-created_at"]
+    pagination_class = ProductPagination
 
     def get_serializer_class(self):
         if self.action == "list":
             return ProductListSerializer
         return ProductDetailSerializer
 
+    def retrieve(self, request, *args, **kwargs):
+        product = self.get_object()
+        product_data = self.get_serializer(product).data
+
+        images = product.images.all()
+        paginator = ProductImagePagination()
+        paginated_images = paginator.paginate_queryset(images, request)
+        image_serializer = ProductImageSerializer(paginated_images, many=True, context={"request": request})
+        paginated_response = paginator.get_paginated_response(image_serializer.data)
+
+        product_data["images"] = paginated_response.data
+        return Response(product_data)
+
+
+# class CategoryViewSet(viewsets.ModelViewSet):
+#     queryset = Category.objects.all()
+#     permission_classes = [IsAdminOrReadOnly]
+#     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+#     search_fields = ["name"]
+#     ordering_fields = ["created_at"]
+#     ordering = ["name"]
+#     pagination_class = CategoryPagination
+
+#     def get_serializer_class(self):
+#         if self.action == "retrieve":
+#             return CategoryDetailSerializer
+#         return CategoryListSerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
@@ -540,8 +570,35 @@ class CategoryViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
     ordering_fields = ["created_at"]
     ordering = ["name"]
+    pagination_class = CategoryPagination
+    serializer_class = CategorySerializer
 
-    def get_serializer_class(self):
-        if self.action == "retrieve":
-            return CategoryDetailSerializer
-        return CategoryListSerializer
+    # def get_serializer_class(self):
+    #     if self.action == "retrieve":
+    #         return CategoryDetailSerializer
+    #     return CategoryListSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        category = self.get_object()
+        category_data = self.get_serializer(category).data
+
+        # Paginate the category’s products
+        products = Product.objects.filter(category=category).select_related("category").prefetch_related("images")
+        paginator = ProductPagination()
+        paginated_products = paginator.paginate_queryset(products, request)
+        product_serializer = ProductListSerializer(paginated_products, many=True, context={"request": request})
+        paginated_response = paginator.get_paginated_response(product_serializer.data)
+
+        # Inject into main response
+        category_data["products"] = paginated_response.data
+        return Response(category_data)
+
+
+class ProductImageViewSet(viewsets.ModelViewSet):
+    """
+    Admin-only viewset for managing product images.
+    """
+    queryset = ProductImage.objects.all().select_related('product')
+    serializer_class = ProductImageSerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = ProductImagePagination
