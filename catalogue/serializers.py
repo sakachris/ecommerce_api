@@ -5,7 +5,36 @@ from .models import UserRole, Category, Product, ProductImage
 from rest_framework.validators import UniqueValidator
 from django.utils.translation import gettext_lazy as _
 
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import check_password
+
+
 User = get_user_model()
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        email = attrs.get(self.username_field)
+        password = attrs.get('password')
+
+        try:
+            user = User.objects.get(**{self.username_field: email})
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"detail": "Invalid email or password."})
+
+        if not check_password(password, user.password):
+            raise serializers.ValidationError({"detail": "Invalid email or password."})
+
+        if not user.is_active:
+            raise serializers.ValidationError({
+                "detail": "Account not verified. Please check your email for the verification link or request a new one.",
+                "unverified": True,
+                "resend_endpoint": "/api/auth/resend-verification/"
+            })
+
+        # now that the user is verified, let the default serializer generate the token
+        data = super().validate(attrs)
+        return data
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -88,6 +117,10 @@ class VerifyEmailSerializer(serializers.Serializer):
         required=True, help_text="JWT email verification token"
     )
 
+from rest_framework import serializers
+
+class ResendEmailVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
 
 # class ProductImageSerializer(serializers.ModelSerializer):
 #     class Meta:
