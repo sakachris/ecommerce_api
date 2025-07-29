@@ -80,12 +80,14 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "user": "200/min",
         "anon": "50/min",
+        "resend_verification": "2/hour",
     },
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
+    "EXCEPTION_HANDLER": "catalogue.throttles.custom_throttle_exception_handler",
 }
 
 SIMPLE_JWT = {

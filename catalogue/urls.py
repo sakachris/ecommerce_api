@@ -13,6 +13,9 @@ from .views import (
     CategoryViewSet,
     ProductViewSet,
     ProductImageViewSet,
+    ResendVerificationEmailView,
+    CustomTokenObtainPairView,
+    CustomTokenRefreshView,
 )
 
 router = DefaultRouter()
@@ -24,6 +27,8 @@ urlpatterns = [
     # Auth
     path("auth/register/", RegisterView.as_view(), name="auth-register"),
     path("auth/verify-email/", VerifyEmailView.as_view(), name="auth-verify-email"),
+    path("auth/resend-email/", ResendVerificationEmailView.as_view(), name="auth-resend-email"),
+    path('auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path(
         "auth/change-password/",
@@ -41,7 +46,9 @@ urlpatterns = [
         name="auth-reset-password-confirm",
     ),
     # JWT
-    path("auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    # path("auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    # path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("auth/token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("auth/token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path("", include(router.urls)),
 ]
