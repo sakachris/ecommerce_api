@@ -89,10 +89,51 @@ class VerifyEmailSerializer(serializers.Serializer):
     )
 
 
+# class ProductImageSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = ProductImage
+#         fields = ["image_id", "image_url", "is_primary"]
+
+
 class ProductImageSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+
     class Meta:
         model = ProductImage
-        fields = ["image_id", "image_url", "is_primary"]
+        fields = [
+            "image_id",
+            "product",         # Required when creating or updating
+            "product_name",    # Read-only display
+            "image_url",
+            "is_primary",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["image_id", "created_at", "updated_at", "product_name"]
+
+    def validate(self, data):
+        """
+        Ensure only one primary image per product.
+        """
+        is_primary = data.get("is_primary", False)
+        product = data.get("product")
+
+        # When updating, exclude self from the check
+        instance = getattr(self, "instance", None)
+        if is_primary and product:
+            existing_primary = ProductImage.objects.filter(
+                product=product,
+                is_primary=True
+            )
+            if instance:
+                existing_primary = existing_primary.exclude(pk=instance.pk)
+
+            if existing_primary.exists():
+                raise serializers.ValidationError(
+                    {"is_primary": "This product already has a primary image."}
+                )
+
+        return data
 
 
 class ProductListSerializer(serializers.ModelSerializer):
@@ -115,7 +156,7 @@ class ProductListSerializer(serializers.ModelSerializer):
         return primary.image_url if primary else None
 
 class ProductDetailSerializer(serializers.ModelSerializer):
-    images = ProductImageSerializer(many=True, read_only=True)
+    # images = ProductImageSerializer(many=True, read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
 
     class Meta:
@@ -130,37 +171,19 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "stock_quantity",
             "created_at",
             "updated_at",
-            "images",
+            # "images",
         ]
 
 
-# class ProductSerializer(serializers.ModelSerializer):
-#     images = ProductImageSerializer(many=True, read_only=True)
-
-#     class Meta:
-#         model = Product
-#         fields = [
-#             "product_id",
-#             "category",
-#             "name",
-#             "description",
-#             "price",
-#             "stock_quantity",
-#             "created_at",
-#             "updated_at",
-#             "images",
-#         ]
-
-
-class CategoryListSerializer(serializers.ModelSerializer):
+class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["category_id", "name", "description", "created_at"]
 
 
-class CategoryDetailSerializer(serializers.ModelSerializer):
-    products = ProductListSerializer(many=True, read_only=True)
+# class CategoryDetailSerializer(serializers.ModelSerializer):
+#     products = ProductListSerializer(many=True, read_only=True)
 
-    class Meta:
-        model = Category
-        fields = ["category_id", "name", "description", "created_at", "products"]
+#     class Meta:
+#         model = Category
+#         fields = ["category_id", "name", "description", "created_at", "products"]
