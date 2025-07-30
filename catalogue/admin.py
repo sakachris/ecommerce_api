@@ -1,7 +1,7 @@
 # catalogue/admin.py
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, Category, Product, ProductImage
+from .models import User, Category, Product, ProductImage, RequestLog, BlockedIP
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -62,3 +62,15 @@ class ProductImageAdmin(admin.ModelAdmin):
         if obj:
             return self.readonly_fields + ('created_at',)
         return self.readonly_fields
+    
+
+@admin.register(RequestLog)
+class RequestLogAdmin(admin.ModelAdmin):
+    list_display = ('ip_address', 'path', 'timestamp', 'country', 'city')
+    ordering = ('-timestamp',)
+
+@admin.register(BlockedIP)
+class BlockedIPAdmin(admin.ModelAdmin):
+    list_display = ('ip_address',)
+    ordering = ('ip_address',)
+    search_fields = ('ip_address',)
