@@ -112,6 +112,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "catalogue.middleware.RequestLogMiddleware",
 ]
 
 ROOT_URLCONF = "ecommerce_api.urls"
@@ -253,3 +254,6 @@ EMAIL_VERIFICATION_TOKEN_LIFETIME = timedelta(
 PASSWORD_RESET_TOKEN_LIFETIME = timedelta(
     minutes=env.int("PASSWORD_RESET_TOKEN_MINUTES", default=30)
 )
+
+# IP Geolocation API Key
+IPGEOLOCATION_API_KEY = env("IPGEOLOCATION_API_KEY")
