@@ -11,15 +11,23 @@ from django.conf import settings
 API_KEY = settings.IPGEOLOCATION_API_KEY
 
 def get_client_ip(request):
-    # Use custom header for local testing
-    if request.META.get("HTTP_FAKE_IP"):
-        return request.META["HTTP_FAKE_IP"]
 
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
+        # Get the first IP in the list (the client's)
+        ip = x_forwarded_for.split(",")[0].strip()
+    else:
+        ip = request.META.get("REMOTE_ADDR")
+    return ip
 
-    return request.META.get("REMOTE_ADDR")
+    # if request.META.get("HTTP_FAKE_IP"):
+    #     return request.META["HTTP_FAKE_IP"]
+
+    # x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    # if x_forwarded_for:
+    #     return x_forwarded_for.split(",")[0].strip()
+
+    # return request.META.get("REMOTE_ADDR")
 
 
 def get_geolocation(ip):
