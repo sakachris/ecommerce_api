@@ -259,3 +259,6 @@ PASSWORD_RESET_TOKEN_LIFETIME = timedelta(
 
 # IP Geolocation API Key
 IPGEOLOCATION_API_KEY = env("IPGEOLOCATION_API_KEY")
+
+# Enable admin registration
+ENABLE_ADMIN_REGISTRATION = env.bool("ENABLE_ADMIN_REGISTRATION", default=False)

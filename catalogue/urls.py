@@ -16,6 +16,7 @@ from .views import (
     ResendVerificationEmailView,
     CustomTokenObtainPairView,
     CustomTokenRefreshView,
+    RegisterAdminView,
 )
 
 router = DefaultRouter()
@@ -26,6 +27,7 @@ router.register(r"product-images", ProductImageViewSet, basename="productimage")
 urlpatterns = [
     # Auth
     path("auth/register/", RegisterView.as_view(), name="auth-register"),
+    path("auth/register-admin/", RegisterAdminView.as_view(), name="auth-register-admin"),
     path("auth/verify-email/", VerifyEmailView.as_view(), name="auth-verify-email"),
     path("auth/resend-email/", ResendVerificationEmailView.as_view(), name="auth-resend-email"),
     path('auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
