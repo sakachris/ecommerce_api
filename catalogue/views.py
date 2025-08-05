@@ -383,6 +383,12 @@ class ProfileView(generics.RetrieveUpdateAPIView):
 
     patch:
     Update the authenticated user's profile.
+
+    put:
+    Replace the authenticated user's profile.
+
+    delete:
+    Delete the authenticated user's account.
     """
 
     serializer_class = UserSerializer
@@ -426,6 +432,27 @@ class ProfileView(generics.RetrieveUpdateAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+    @swagger_auto_schema(
+        operation_summary="Delete authenticated user account",
+        operation_description="Deletes the authenticated user's account.",
+        tags=["Auth - User Profile"],
+    )
+    def delete(self, request, *args, **kwargs):
+        user = self.get_object()
+
+        # Prevent admins from deleting themselves
+        if user.is_superuser: # or user.is_staff
+            return Response(
+                {"detail": "Admins cannot delete their account this way."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        user.delete()
+        return Response(
+            {"detail": "Your account has been permanently deleted."},
+            status=status.HTTP_204_NO_CONTENT,
+        )
 
 
 class ChangePasswordView(APIView):
