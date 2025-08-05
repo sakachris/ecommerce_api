@@ -26,7 +26,7 @@ from django.urls import reverse
 from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import TokenError
 from .tokens import EmailVerificationToken, PasswordResetToken
-from .tasks import send_verification_email, send_password_reset_email
+from .tasks import send_verification_email, send_password_reset_email, send_account_deleted_email
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .redis_token_store import RedisTokenStore
@@ -447,11 +447,17 @@ class ProfileView(generics.RetrieveUpdateAPIView):
                 {"detail": "Admins cannot delete their account this way."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        user_email = user.email
+        full_name = user.get_full_name()
 
         user.delete()
+
+        send_account_deleted_email.delay(user_email, full_name)
+
         return Response(
             {"detail": "Your account has been permanently deleted."},
-            status=status.HTTP_204_NO_CONTENT,
+            # status=status.HTTP_204_NO_CONTENT,
+            status=status.HTTP_200_OK,
         )
 
 
