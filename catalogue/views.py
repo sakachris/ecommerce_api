@@ -376,7 +376,7 @@ class ResendVerificationEmailView(APIView):
         )
 
 
-class MeView(generics.RetrieveUpdateAPIView):
+class ProfileView(generics.RetrieveUpdateAPIView):
     """
     get:
     Return the authenticated user's profile.
