@@ -72,6 +72,45 @@ class RegisterSerializer(serializers.ModelSerializer):
             is_active=False,
         )
         return user
+    
+
+class RegisterAdminSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(
+        required=True,
+        validators=[
+            UniqueValidator(
+                queryset=User.objects.all(),
+                message=_("An admin user with that email already exists."),
+            )
+        ],
+    )
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    class Meta:
+        model = User
+        fields = (
+            "user_id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone_number",
+            "role",
+            "password",
+        )
+        read_only_fields = ("user_id", "role")
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            password=validated_data["password"],
+            first_name=validated_data["first_name"],
+            last_name=validated_data["last_name"],
+            phone_number=validated_data.get("phone_number"),
+            role=UserRole.ADMIN,
+            is_staff=True,
+            is_active=False,
+        )
+        return user
 
 
 class UserSerializer(serializers.ModelSerializer):

@@ -18,6 +18,8 @@ from .serializers import (
     ProductDetailSerializer,
     CategorySerializer,
     ResendEmailVerificationSerializer,
+    CustomTokenObtainPairSerializer,
+    RegisterAdminSerializer,
 )
 from django.conf import settings
 from django.urls import reverse
@@ -45,7 +47,7 @@ from .throttles import ResendVerificationThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
-from .serializers import CustomTokenObtainPairSerializer
+from rest_framework.exceptions import PermissionDenied
 
 User = get_user_model()
 redis_store = RedisTokenStore()
@@ -148,6 +150,73 @@ class RegisterView(generics.CreateAPIView):
         self.perform_create(serializer)
         return Response(
             {"detail": "User registered successfully. Verification email sent."},
+            status=status.HTTP_201_CREATED,
+        )
+    
+class RegisterAdminView(generics.CreateAPIView):
+    """
+    post:
+    Temporary endpoint to register an admin user.
+    Only for demonstration and testing purposes.
+    """
+
+    queryset = User.objects.all()
+    permission_classes = (permissions.AllowAny,)
+    serializer_class = RegisterAdminSerializer
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        token = EmailVerificationToken.for_user(user)
+
+        # Store jti with TTL in Redis
+        redis_store.store(
+            token_type=token["token_type"],
+            jti=str(token["jti"]),
+            ttl=EmailVerificationToken.lifetime,
+        )
+
+        verify_path = reverse("auth-verify-email")
+        verify_url = f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
+        send_verification_email.delay(user.email, verify_url)
+
+    @swagger_auto_schema(
+        operation_summary="Register an admin user (Temporary Endpoint)",
+        operation_description="Create a new admin user account and send a verification email. This endpoint is only temporary and will be disabled soon.",
+        tags=["Auth - Registration"],
+        request_body=RegisterAdminSerializer,
+        responses={
+            201: openapi.Response(
+                description="Admin registered successfully. Verification email sent.",
+                schema=DetailResponseSerializer,
+                examples={
+                    "application/json": {
+                        "detail": "Admin registered successfully. Verification email sent."
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Bad request, validation errors.",
+                schema=DetailResponseSerializer,
+                examples={
+                    "application/json": {
+                        "detail": "An admin with that email already exists."
+                    }
+                },
+            ),
+        },
+    )
+    def post(self, request, *args, **kwargs):
+        """
+        Override the post method to use the custom serializer.
+        """
+        if not settings.ENABLE_ADMIN_REGISTRATION:
+            raise PermissionDenied("Admin registration is currently disabled.")
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response(
+            {"detail": "Admin registered successfully. Verification email sent."},
             status=status.HTTP_201_CREATED,
         )
 
