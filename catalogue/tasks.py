@@ -37,3 +37,23 @@ def send_password_reset_email(self, to_email: str, reset_url: str):
         )
     except Exception as exc:
         raise self.retry(exc=exc)
+    
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30, queue='ecommerce')
+def send_account_deleted_email(self, to_email: str, full_name: str = None):
+    try:
+        subject = "Your account has been deleted"
+        message = (
+            f"Dear {full_name or 'User'},\n\n"
+            "Your account has been permanently deleted from our system. "
+            "If this was not you, please contact support immediately."
+        )
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [to_email],
+            fail_silently=False
+        )
+    except Exception as exc:
+        raise self.retry(exc=exc)
