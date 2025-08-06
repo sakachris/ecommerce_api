@@ -113,7 +113,8 @@ class RegisterView(generics.CreateAPIView):
 
         verify_path = reverse("auth-verify-email")
         verify_url = f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
-        send_verification_email.delay(user.email, verify_url)
+        full_name = user.get_full_name()
+        send_verification_email.delay(user.email, verify_url, full_name)
 
     @swagger_auto_schema(
         operation_summary="Register a new user",
@@ -177,7 +178,8 @@ class RegisterAdminView(generics.CreateAPIView):
 
         verify_path = reverse("auth-verify-email")
         verify_url = f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
-        send_verification_email.delay(user.email, verify_url)
+        full_name = user.get_full_name()
+        send_verification_email.delay(user.email, verify_url, full_name)
 
     @swagger_auto_schema(
         operation_summary="Register an admin user (Temporary Endpoint)",
@@ -368,7 +370,8 @@ class ResendVerificationEmailView(APIView):
         )
         verify_path = reverse("auth-verify-email")
         verify_url = f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
-        send_verification_email.delay(user.email, verify_url)
+        full_name = user.get_full_name()
+        send_verification_email.delay(user.email, verify_url, full_name)
 
         return Response(
             {"detail": "Verification email resent."},
@@ -545,7 +548,19 @@ class PasswordResetRequestView(APIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"]
 
-        user = User.objects.get(email=email)
+        # user = User.objects.get(email=email)
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "No user found with this email address."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if user.is_active is False:
+            return Response(
+                {"detail": "User account is not active. Check your email for verification link or request for another one."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         token = PasswordResetToken.for_user(user)
 
         redis_store.store(
@@ -556,7 +571,8 @@ class PasswordResetRequestView(APIView):
 
         reset_path = reverse("auth-reset-password-confirm")
         reset_url = f"{settings.PUBLIC_BASE_URL}{reset_path}?token={str(token)}"
-        send_password_reset_email.delay(user.email, reset_url)
+        full_name = user.get_full_name()
+        send_password_reset_email.delay(user.email, reset_url, full_name)
         return Response(
             {"detail": "Password reset email sent."}, status=status.HTTP_200_OK
         )
