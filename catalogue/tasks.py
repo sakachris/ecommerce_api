@@ -4,10 +4,10 @@ from django.core.mail import send_mail
 from django.conf import settings
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=30, queue='ecommerce')
-def send_verification_email(self, to_email: str, verification_url: str):
+def send_verification_email(self, to_email: str, verification_url: str, full_name: str = None):
     try:
         subject = "Verify your email address"
-        message = f"Hi,\n\nPlease click the link below to verify your email:\n{verification_url}\n\nThank you!"
+        message = f"Dear {full_name or 'User'},\n\nPlease click the link below to verify your email:\n{verification_url}\n\nThank you!"
         send_mail(
             subject,
             message,
@@ -20,11 +20,11 @@ def send_verification_email(self, to_email: str, verification_url: str):
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=30, queue='ecommerce')
-def send_password_reset_email(self, to_email: str, reset_url: str):
+def send_password_reset_email(self, to_email: str, reset_url: str, full_name: str = None):
     try:
         subject = "Password Reset Request"
         message = (
-            f"Hi,\n\nWe received a password reset request for your account.\n"
+            f"Dear {full_name or 'User'},\n\nWe received a password reset request for your account.\n"
             f"Click the link below to reset your password:\n{reset_url}\n\n"
             f"If you did not request this, you can ignore this email."
         )
