@@ -48,6 +48,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import MultiPartParser, FormParser
 
 User = get_user_model()
 redis_store = RedisTokenStore()
@@ -891,6 +892,7 @@ class ProductImageViewSet(viewsets.ModelViewSet):
     serializer_class = ProductImageSerializer
     permission_classes = [IsAdminUser]
     pagination_class = ProductImagePagination
+    parser_classes = (MultiPartParser, FormParser)
 
     @swagger_auto_schema(
         operation_summary="List all product images",

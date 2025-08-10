@@ -15,6 +15,7 @@ import environ
 import os
 from datetime import timedelta
 
+
 env = environ.Env()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -64,6 +65,7 @@ INSTALLED_APPS = [
     "django_filters",
     "rest_framework_simplejwt",
     "catalogue",
+    "storages",
 ]
 
 AUTH_USER_MODEL = "catalogue.User"
@@ -91,6 +93,19 @@ REST_FRAMEWORK = {
     ],
     "EXCEPTION_HANDLER": "catalogue.throttles.custom_throttle_exception_handler",
 }
+
+# MinIO S3 Configuration
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL")
+AWS_DEFAULT_ACL = "public-read"  # so objects are public
+AWS_QUERYSTRING_AUTH = False  # Public URLs
+
+DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+
+MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/"
+
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
@@ -189,8 +204,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+# MEDIA_URL = "/media/"
+# MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 # Optional compression support
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"

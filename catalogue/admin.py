@@ -53,7 +53,7 @@ class ProductAdmin(admin.ModelAdmin):
     
 @admin.register(ProductImage)
 class ProductImageAdmin(admin.ModelAdmin):
-    list_display = ('product', 'image_url', 'is_primary', 'created_at')
+    list_display = ('product', 'image', 'is_primary', 'created_at')
     list_filter = ('is_primary',)
     search_fields = ('product__name',)
     ordering = ('-created_at',)
