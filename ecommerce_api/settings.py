@@ -277,3 +277,8 @@ IPGEOLOCATION_API_KEY = env("IPGEOLOCATION_API_KEY")
 
 # Enable admin registration
 ENABLE_ADMIN_REGISTRATION = env.bool("ENABLE_ADMIN_REGISTRATION", default=False)
+
+# Custom pagination settings
+PRODUCT_PAGE_SIZE = env.int("PRODUCT_PAGE_SIZE", default=5)
+CATEGORY_PAGE_SIZE = env.int("CATEGORY_PAGE_SIZE", default=4)
+PRODUCT_IMAGE_PAGE_SIZE = env.int("PRODUCT_IMAGE_PAGE_SIZE", default=3)
