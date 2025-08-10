@@ -176,7 +176,8 @@ class ProductImageSerializer(serializers.ModelSerializer):
             "image_id",
             "product",         # Required when creating or updating
             "product_name",    # Read-only display
-            "image_url",
+            # "image_url",
+            "image",           # ImageField for file upload
             "is_primary",
             "created_at",
             "updated_at",
@@ -225,7 +226,8 @@ class ProductListSerializer(serializers.ModelSerializer):
 
     def get_primary_image(self, obj):
         primary = obj.images.filter(is_primary=True).first()
-        return primary.image_url if primary else None
+        # return primary.image if primary else None
+        return primary.image.url if primary and primary.image else None
 
 class ProductDetailSerializer(serializers.ModelSerializer):
     # images = ProductImageSerializer(many=True, read_only=True)
