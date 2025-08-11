@@ -14,7 +14,9 @@ concurrency:
 jobs:
   # STAGING JOB
   staging:
-    if: github.ref_name == 'develop'
+    if: |
+      (github.event_name == 'push' && github.ref_name == 'develop') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'develop')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -48,7 +50,7 @@ jobs:
           kubectl rollout restart deployment ecom-backend-staging -n ecom-api
           kubectl rollout restart deployment ecom-celery-worker-staging -n ecom-api
 
-      # ✅ SUCCESS EMAIL
+      # SUCCESS EMAIL
       - name: Send success email (staging)
         if: success()
         uses: dawidd6/action-send-mail@v3
@@ -68,7 +70,7 @@ jobs:
             Commit: ${{ github.sha }}
             Timestamp: ${{ github.event.head_commit.timestamp }}
 
-      # ❌ FAILURE EMAIL
+      # FAILURE EMAIL
       - name: Send failure email (staging)
         if: failure()
         uses: dawidd6/action-send-mail@v3
@@ -90,7 +92,9 @@ jobs:
 
   # PRODUCTION JOB
   production:
-    if: github.ref_name == 'main'
+    if: |
+      (github.event_name == 'push' && github.ref_name == 'main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -124,7 +128,7 @@ jobs:
           kubectl rollout restart deployment ecom-backend -n ecom-api
           kubectl rollout restart deployment ecom-celery-worker -n ecom-api
 
-      # ✅ SUCCESS EMAIL
+      # SUCCESS EMAIL
       - name: Send success email (production)
         if: success()
         uses: dawidd6/action-send-mail@v3
@@ -144,7 +148,7 @@ jobs:
             Commit: ${{ github.sha }}
             Timestamp: ${{ github.event.head_commit.timestamp }}
 
-      # ❌ FAILURE EMAIL
+      # FAILURE EMAIL
       - name: Send failure email (production)
         if: failure()
         uses: dawidd6/action-send-mail@v3
