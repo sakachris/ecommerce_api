@@ -1,9 +1,9 @@
 # catalogue/throttles.py
-from rest_framework.throttling import SimpleRateThrottle
-from rest_framework.exceptions import Throttled
-from rest_framework.views import exception_handler
-from rest_framework.response import Response
 from datetime import timedelta
+
+from rest_framework.exceptions import Throttled
+from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.views import exception_handler
 
 
 def format_duration(seconds):
@@ -11,6 +11,10 @@ def format_duration(seconds):
 
 
 class ResendVerificationThrottle(SimpleRateThrottle):
+    """
+    Throttle for limiting the number of email verification resend requests.
+    If the user is not authenticated, it throttles based on IP address.
+    """
     scope = "resend_verification"
 
     def get_cache_key(self, request, view):
@@ -42,6 +46,11 @@ class ResendVerificationThrottle(SimpleRateThrottle):
 
 
 def custom_throttle_exception_handler(exc, context):
+    """
+    Custom exception handler for throttling exceptions.
+    This handler formats the response for throttling exceptions to include
+    a human-readable retry time and a custom message.
+    """
     response = exception_handler(exc, context)
 
     if isinstance(exc, Throttled):
@@ -64,7 +73,9 @@ def custom_throttle_exception_handler(exc, context):
 
         custom_detail = {
             "detail": "Too many resend attempts. Please try again later.",
-            "available_in_seconds": int(wait_time) if wait_time is not None else None,
+            "available_in_seconds": (
+                int(wait_time) if wait_time is not None else None
+            ),
             "retry_after": retry_after_human,
         }
 

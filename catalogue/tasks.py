@@ -1,7 +1,8 @@
 # catalogue/tasks.py
 from celery import shared_task
-from django.core.mail import send_mail
 from django.conf import settings
+from django.core.mail import send_mail
+
 
 @shared_task(
         bind=True, max_retries=3, default_retry_delay=30, queue='ecommerce'
@@ -18,13 +19,16 @@ def send_verification_email(
     """
     try:
         subject = "Verify your email address"
-        message = f"Dear {full_name or 'User'},\n\nPlease click the link below to verify your email:\n{verification_url}\n\nThank you!"
+        message = (
+            f"Dear {full_name or 'User'},\n\nPlease click the link below "
+            f"to verify your email:\n{verification_url}\n\nThank you!"
+        )
         send_mail(
             subject,
             message,
             settings.DEFAULT_FROM_EMAIL,
             [to_email],
-            fail_silently=False 
+            fail_silently=False
         )
     except Exception as exc:
         raise self.retry(exc=exc)
@@ -46,7 +50,8 @@ def send_password_reset_email(
     try:
         subject = "Password Reset Request"
         message = (
-            f"Dear {full_name or 'User'},\n\nWe received a password reset request for your account.\n"
+            f"Dear {full_name or 'User'},\n\nWe received a "
+            f"password reset request for your account.\n"
             f"Click the link below to reset your password:\n{reset_url}\n\n"
             f"If you did not request this, you can ignore this email."
         )

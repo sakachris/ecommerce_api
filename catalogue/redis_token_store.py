@@ -1,20 +1,29 @@
+from datetime import timedelta
+
 import redis
 from django.conf import settings
-from datetime import timedelta
+
 
 class RedisTokenStore:
     """
     A tiny wrapper around Redis to store one-time JWT jtis with TTL.
     """
     def __init__(self):
-        self.client = redis.StrictRedis.from_url(settings.REDIS_URL, decode_responses=True)
+        self.client = redis.StrictRedis.from_url(
+            settings.REDIS_URL, decode_responses=True
+        )
 
     def _key(self, token_type: str, jti: str) -> str:
         return f"jwt:{token_type}:{jti}"
 
     def store(self, token_type: str, jti: str, ttl: timedelta):
         # SET key value NX EX <seconds> – ensures no overwrite (optional)
-        self.client.set(self._key(token_type, jti), "1", ex=int(ttl.total_seconds()), nx=True)
+        self.client.set(
+            self._key(token_type, jti),
+            "1",
+            ex=int(ttl.total_seconds()),
+            nx=True
+        )
 
     def pop(self, token_type: str, jti: str) -> bool:
         """
