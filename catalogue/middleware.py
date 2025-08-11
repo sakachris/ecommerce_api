@@ -1,17 +1,21 @@
 # catalogue/middleware.py
 
 import requests
-from django.utils.timezone import now
-from django.http import HttpResponseForbidden
-from django.core.cache import cache
-from .models import RequestLog, BlockedIP
 from django.conf import settings
+from django.core.cache import cache
+from django.http import HttpResponseForbidden
+from django.utils.timezone import now
 
+from .models import BlockedIP, RequestLog
 
 API_KEY = settings.IPGEOLOCATION_API_KEY
 
-def get_client_ip(request):
 
+def get_client_ip(request):
+    """
+    Extracts the client's IP address from the request.
+    Handles both direct IP and forwarded IPs from proxies.
+    """
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
         # Get the first IP in the list (the client's)
@@ -20,17 +24,13 @@ def get_client_ip(request):
         ip = request.META.get("REMOTE_ADDR")
     return ip
 
-    # if request.META.get("HTTP_FAKE_IP"):
-    #     return request.META["HTTP_FAKE_IP"]
-
-    # x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    # if x_forwarded_for:
-    #     return x_forwarded_for.split(",")[0].strip()
-
-    # return request.META.get("REMOTE_ADDR")
-
 
 def get_geolocation(ip):
+    """
+    Fetches geolocation data for the given IP using the IP Geolocation API.
+    Caches the result for 24 hours to reduce API calls.
+    Returns a dictionary with 'country' and 'city'.
+    """
     cache_key = f"geo_{ip}"
     if cached := cache.get(cache_key):
         return cached
@@ -54,6 +54,11 @@ def get_geolocation(ip):
 
 
 class RequestLogMiddleware:
+    """
+    Middleware to log requests and block blacklisted IPs.
+    Logs the request's IP address, path, timestamp, country, and city.
+    Blocks access for IPs that are in the BlockedIP model.
+    """
     def __init__(self, get_response):
         self.get_response = get_response
 

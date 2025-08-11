@@ -1,13 +1,12 @@
 # ecommerce_api/pagination/custom.py
 
+from django.conf import settings
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.utils.urls import replace_query_param
-from django.conf import settings
 
 
 class ProductPagination(PageNumberPagination):
-    # page_size = 5
     page_size = settings.PRODUCT_PAGE_SIZE
     page_size_query_param = "page_size"
     max_page_size = 100
@@ -27,7 +26,9 @@ class ProductPagination(PageNumberPagination):
                         request.build_absolute_uri(), self.page_query_param, 1
                     ),
                     "last_page": replace_query_param(
-                        request.build_absolute_uri(), self.page_query_param, last_page
+                        request.build_absolute_uri(),
+                        self.page_query_param,
+                        last_page
                     ),
                     "next": self.get_next_link(),
                     "previous": self.get_previous_link(),
@@ -38,7 +39,6 @@ class ProductPagination(PageNumberPagination):
 
 
 class CategoryPagination(PageNumberPagination):
-    # page_size = 4
     page_size = settings.CATEGORY_PAGE_SIZE
     page_size_query_param = "page_size"
     max_page_size = 100
@@ -58,7 +58,9 @@ class CategoryPagination(PageNumberPagination):
                         request.build_absolute_uri(), self.page_query_param, 1
                     ),
                     "last_page": replace_query_param(
-                        request.build_absolute_uri(), self.page_query_param, last_page
+                        request.build_absolute_uri(),
+                        self.page_query_param,
+                        last_page
                     ),
                     "next": self.get_next_link(),
                     "previous": self.get_previous_link(),
@@ -69,7 +71,6 @@ class CategoryPagination(PageNumberPagination):
 
 
 class ProductImagePagination(PageNumberPagination):
-    # page_size = 3
     page_size = settings.PRODUCT_IMAGE_PAGE_SIZE
     page_size_query_param = "page_size"
     max_page_size = 100
@@ -89,7 +90,9 @@ class ProductImagePagination(PageNumberPagination):
                         request.build_absolute_uri(), self.page_query_param, 1
                     ),
                     "last_page": replace_query_param(
-                        request.build_absolute_uri(), self.page_query_param, last_page
+                        request.build_absolute_uri(),
+                        self.page_query_param,
+                        last_page
                     ),
                     "next": self.get_next_link(),
                     "previous": self.get_previous_link(),

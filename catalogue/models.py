@@ -1,29 +1,43 @@
 import uuid
-from django.db import models
+
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
-    PermissionsMixin,
+    PermissionsMixin
 )
+from django.db import models
 from django.db.models import Q
-from django.utils.translation import gettext_lazy as _
 from storages.backends.s3boto3 import S3Boto3Storage
 
+
 class UserRole(models.TextChoices):
+    """
+    Enum for user roles in the system.
+    Defines roles such as guest, customer, and admin.
+    """
     GUEST = "guest", "Guest"
     CUSTOMER = "customer", "Customer"
     ADMIN = "admin", "Admin"
 
 
 class UserManager(BaseUserManager):
-    def create_user(self, email, first_name, last_name, password=None, **extra_fields):
+    """
+    Custom manager for User model.
+    Handles user creation and superuser creation with custom fields.
+    """
+    def create_user(
+            self, email, first_name, last_name, password=None, **extra_fields
+    ):
         if not email:
             raise ValueError("Email is required")
         if not password:
             raise ValueError("Password is required")
         email = self.normalize_email(email)
         user = self.model(
-            email=email, first_name=first_name, last_name=last_name, **extra_fields
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            **extra_fields
         )
         user.set_password(password)
         user.save(using=self._db)
@@ -41,10 +55,20 @@ class UserManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
-        return self.create_user(email, first_name, last_name, password, **extra_fields)
+        return self.create_user(
+            email,
+            first_name,
+            last_name,
+            password,
+            **extra_fields
+        )
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    """
+    Custom User model with additional fields.
+    Includes fields for ID, name, email, phone number, role, and timestamps.
+    """
     user_id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, db_index=True
     )
@@ -86,6 +110,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Category(models.Model):
+    """
+    Model representing a product category.
+    Includes fields for ID, name, description, and timestamps.
+    """
     category_id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, db_index=True
     )
@@ -105,11 +133,19 @@ class Category(models.Model):
 
 
 class Product(models.Model):
+    """
+    Model representing a product.
+    Includes fields for ID, category, name, description,
+    price, stock quantity, and timestamps.
+    """
     product_id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, db_index=True
     )
     category = models.ForeignKey(
-        Category, related_name="products", on_delete=models.CASCADE, db_index=True
+        Category,
+        related_name="products",
+        on_delete=models.CASCADE,
+        db_index=True
     )
     name = models.CharField(max_length=255)
     description = models.TextField()
@@ -129,14 +165,16 @@ class Product(models.Model):
 
 
 class ProductImage(models.Model):
+    """
+    Model representing an image for a product.
+    Includes fields for ID, product, image, timestamps, and primary status.
+    """
     image_id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, db_index=True
     )
     product = models.ForeignKey(
         Product, related_name="images", on_delete=models.CASCADE, db_index=True
     )
-    # image_url = models.URLField(max_length=500)
-    # image = models.ImageField(upload_to="products/", null=True, blank=True)
     image = models.ImageField(
         storage=S3Boto3Storage(),
         upload_to="products/",
@@ -161,17 +199,28 @@ class ProductImage(models.Model):
         ]
 
     def __str__(self):
-        return f"{'Primary' if self.is_primary else 'Secondary'} Image of {self.product.name}"
+        return (
+            f"{'Primary' if self.is_primary else 'Secondary'} "
+            f"Image of {self.product.name}"
+        )
 
 
 class BlockedIP(models.Model):
+    """
+    Model representing a blocked IP address.
+    Includes fields for ID and IP address.
+    """
     ip_address = models.GenericIPAddressField(unique=True)
 
     def __str__(self):
         return self.ip_address
-    
-    
+
+
 class RequestLog(models.Model):
+    """
+    Model representing a logged request.
+    Includes fields for ID, IP address, timestamp, path, country, and city.
+    """
     ip_address = models.GenericIPAddressField()
     timestamp = models.DateTimeField(auto_now_add=True)
     path = models.CharField(max_length=2048)
@@ -179,4 +228,7 @@ class RequestLog(models.Model):
     city = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
-        return f"{self.ip_address} - {self.path} @ {self.timestamp} ({self.country}, {self.city})"
+        return (
+            f"{self.ip_address} - {self.path} @ {self.timestamp} "
+            f"({self.country}, {self.city})"
+        )

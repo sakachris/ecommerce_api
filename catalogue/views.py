@@ -13,7 +13,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import (
-    TokenObtainPairSerializer,
     TokenRefreshSerializer
 )
 from rest_framework_simplejwt.tokens import UntypedToken
@@ -32,7 +31,7 @@ from .models import Category, Product, ProductImage
 from .permissions import IsAdminOrReadOnly
 from .redis_token_store import RedisTokenStore
 from .serializers import (
-    CategorySerializer, 
+    CategorySerializer,
     ChangePasswordSerializer,
     CustomTokenObtainPairSerializer,
     DetailResponseSerializer,
@@ -44,8 +43,11 @@ from .serializers import (
     ResendEmailVerificationSerializer, UserSerializer,
     VerifyEmailSerializer
 )
-from .tasks import (send_account_deleted_email, send_password_reset_email,
-                    send_verification_email)
+from .tasks import (
+    send_account_deleted_email,
+    send_password_reset_email,
+    send_verification_email
+)
 from .throttles import ResendVerificationThrottle
 from .tokens import EmailVerificationToken, PasswordResetToken
 
@@ -163,7 +165,9 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         return Response(
-            {"detail": "User registered successfully. Verification email sent."},
+            {"detail": (
+                "User registered successfully. Verification email sent."
+            )},
             status=status.HTTP_201_CREATED,
         )
 
@@ -488,7 +492,7 @@ class ProfileView(generics.RetrieveUpdateAPIView):
         user = self.get_object()
 
         # Prevent admins from deleting themselves
-        if user.is_superuser: # or user.is_staff
+        if user.is_superuser:  # or user.is_staff
             return Response(
                 {"detail": "Admins cannot delete their account this way."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -1074,7 +1078,8 @@ class ProductImageViewSet(viewsets.ModelViewSet):
 #     @swagger_auto_schema(
 #         operation_summary="Obtain JWT token pair",
 #         operation_description=(
-#             "Provide email and password to receive access and refresh tokens."
+#             "Provide email and password to receive "
+#             "access and refresh tokens."
 #         ),
 #         tags=["Auth - JWT"],
 #         request_body=TokenObtainPairSerializer,
@@ -1087,7 +1092,9 @@ class ProductImageViewSet(viewsets.ModelViewSet):
 class CustomTokenRefreshView(TokenRefreshView):
     @swagger_auto_schema(
         operation_summary="Refresh JWT access token",
-        operation_description="Provide refresh token to get a new access token.",
+        operation_description=(
+            "Provide refresh token to get a new access token."
+        ),
         tags=["Auth - JWT"],
         request_body=TokenRefreshSerializer,
         responses={200: TokenRefreshSerializer}
