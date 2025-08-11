@@ -1,31 +1,29 @@
 # catalogue/urls.py
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView
-)
 
 from .views import (
-    CategoryViewSet, 
+    CategoryViewSet,
     ChangePasswordView,
-    CustomTokenObtainPairView, 
+    CustomTokenObtainPairView,
     CustomTokenRefreshView,
-    PasswordResetConfirmView, 
+    PasswordResetConfirmView,
     PasswordResetRequestView,
-    ProductImageViewSet, 
-    ProductViewSet, 
+    ProductImageViewSet,
+    ProductViewSet,
     ProfileView,
-    RegisterAdminView, 
+    RegisterAdminView,
     RegisterView,
-    ResendVerificationEmailView, 
+    ResendVerificationEmailView,
     VerifyEmailView
 )
 
 router = DefaultRouter()
 router.register(r"categories", CategoryViewSet, basename="categories")
 router.register(r"products", ProductViewSet, basename="products")
-router.register(r"product-images", ProductImageViewSet, basename="productimage")
+router.register(
+    r"product-images", ProductImageViewSet, basename="productimage"
+)
 
 urlpatterns = [
     # Auth
@@ -67,8 +65,6 @@ urlpatterns = [
         name="auth-reset-password-confirm",
     ),
     # JWT
-    # path("auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    # path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path(
         "auth/token/",
         CustomTokenObtainPairView.as_view(),

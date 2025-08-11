@@ -74,6 +74,7 @@ Supports:
 - **Authentication:** JWT (via SimpleJWT)
 - **Search/Filter:** DjangoFilterBackend + DRF SearchFilter/OrderingFilter
 - **Containerization:** Docker
+- **MinIO:** Storage (for product images)
 
 ---
 
@@ -84,6 +85,7 @@ Supports:
 - Redis 7+
 - RabbitMQ 3.11+
 - Docker
+- MinIO
 
 ---
 
@@ -153,6 +155,17 @@ IPGEOLOCATION_API_KEY=your-ip-geolocation-api
 # Enable admin registration
 ENABLE_ADMIN_REGISTRATION=True
 
+# MinIO configuration
+AWS_ACCESS_KEY_ID=your-id
+AWS_SECRET_ACCESS_KEY=your-access-key
+AWS_STORAGE_BUCKET_NAME=your-bucket-name
+AWS_S3_ENDPOINT_URL=your-endpoint-url
+
+# Custom pagination settings
+PRODUCT_PAGE_SIZE=12
+CATEGORY_PAGE_SIZE=4
+PRODUCT_IMAGE_PAGE_SIZE=3
+
 ```
 
 ## Running the Project
@@ -221,17 +234,9 @@ GET /redoc/
 
 ## Deployment Notes
 
-Use Gunicorn or uWSGI behind Nginx for production
+Use docker for deployment
 
-Set DEBUG=False and configure ALLOWED_HOSTS
-
-Use HTTPS (Let’s Encrypt or managed SSL)
-
-Configure PostgreSQL connection pooling (e.g., pgbouncer)
-
-Use persistent volumes for RabbitMQ & Redis in Docker
-
-Rotate SECRET_KEY and credentials regularly
+Preferrably use Kubernetes
 
 
 

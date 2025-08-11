@@ -209,7 +209,7 @@ class VerifyEmailSerializer(serializers.Serializer):
 class ResendEmailVerificationSerializer(serializers.Serializer):
     """
     Serializer for resending email verification.
-    Validates the email address for which the verification link is to be resent.
+    Validates the email address for which verification link is to be resent.
     """
     email = serializers.EmailField()
 
@@ -330,11 +330,11 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ["category_id", "name", "description", "created_at"]
 
 
-class CategoryDetailSerializer(serializers.ModelSerializer):
-    products = ProductListSerializer(many=True, read_only=True)
+# class CategoryDetailSerializer(serializers.ModelSerializer):
+#     products = ProductListSerializer(many=True, read_only=True)
 
-    class Meta:
-        model = Category
-        fields = [
-            "category_id", "name", "description", "created_at", "products"
-        ]
+#     class Meta:
+#         model = Category
+#         fields = [
+#             "category_id", "name", "description", "created_at", "products"
+#         ]
