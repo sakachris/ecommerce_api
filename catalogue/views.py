@@ -1,60 +1,63 @@
 # catalogue/views.py
-from rest_framework import generics, permissions, status
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework import filters, generics, permissions, status, viewsets
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAdminUser
-from django.contrib.auth import get_user_model
-from rest_framework.permissions import AllowAny
-from .serializers import (
-    RegisterSerializer,
-    UserSerializer,
-    ChangePasswordSerializer,
-    PasswordResetRequestSerializer,
-    PasswordResetConfirmSerializer,
-    DetailResponseSerializer,
-    VerifyEmailSerializer,
-    ProductImageSerializer,
-    ProductListSerializer,
-    ProductDetailSerializer,
-    CategorySerializer,
-    ResendEmailVerificationSerializer,
-    CustomTokenObtainPairSerializer,
-    RegisterAdminSerializer,
-)
-from django.conf import settings
-from django.urls import reverse
-from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import TokenError
-from .tokens import EmailVerificationToken, PasswordResetToken
-from .tasks import send_verification_email, send_password_reset_email, send_account_deleted_email
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from .redis_token_store import RedisTokenStore
-from rest_framework import viewsets, filters
-from django_filters.rest_framework import DjangoFilterBackend
-from .models import Category, Product, ProductImage
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from .permissions import IsAdminOrReadOnly
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenRefreshSerializer
+)
+from rest_framework_simplejwt.tokens import UntypedToken
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView
+)
+
 from ecommerce_api.pagination.custom import (
-    ProductPagination,
     CategoryPagination,
     ProductImagePagination,
+    ProductPagination
 )
-from rest_framework import status
-from rest_framework.decorators import action
-from .throttles import ResendVerificationThrottle
 
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from drf_yasg.utils import swagger_auto_schema
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
-from rest_framework.exceptions import PermissionDenied
-from rest_framework.parsers import MultiPartParser, FormParser
+from .models import Category, Product, ProductImage
+from .permissions import IsAdminOrReadOnly
+from .redis_token_store import RedisTokenStore
+from .serializers import (
+    CategorySerializer, 
+    ChangePasswordSerializer,
+    CustomTokenObtainPairSerializer,
+    DetailResponseSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    ProductDetailSerializer, ProductImageSerializer,
+    ProductListSerializer, RegisterAdminSerializer,
+    RegisterSerializer,
+    ResendEmailVerificationSerializer, UserSerializer,
+    VerifyEmailSerializer
+)
+from .tasks import (send_account_deleted_email, send_password_reset_email,
+                    send_verification_email)
+from .throttles import ResendVerificationThrottle
+from .tokens import EmailVerificationToken, PasswordResetToken
 
 User = get_user_model()
 redis_store = RedisTokenStore()
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+    post:
+    Obtain JWT token using custom serializer.
+    """
     serializer_class = CustomTokenObtainPairSerializer
 
     @swagger_auto_schema(
@@ -68,8 +71,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 schema=CustomTokenObtainPairSerializer,
                 examples={
                     "application/json": {
-                        "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiInRJ9...",
+                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciR5cCI6IkpXVCJ9..."
                     }
                 },
             ),
@@ -113,22 +116,31 @@ class RegisterView(generics.CreateAPIView):
         )
 
         verify_path = reverse("auth-verify-email")
-        verify_url = f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
+        verify_url = (
+            f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
+        )
         full_name = user.get_full_name()
         send_verification_email.delay(user.email, verify_url, full_name)
 
     @swagger_auto_schema(
         operation_summary="Register a new user",
-        operation_description="Create a new user account and send a verification email.",
+        operation_description=(
+            "Create a new user account and send a verification email."
+        ),
         tags=["Auth - Registration"],
         request_body=RegisterSerializer,
         responses={
             201: openapi.Response(
-                description="User registered successfully. Verification email sent.",
+                description=(
+                    "User registered successfully. Verification email sent."
+                ),
                 schema=DetailResponseSerializer,
                 examples={
                     "application/json": {
-                        "detail": "User registered successfully. Verification email sent."
+                        "detail": (
+                            "User registered successfully. "
+                            "Verification email sent."
+                        )
                     }
                 },
             ),
@@ -154,7 +166,8 @@ class RegisterView(generics.CreateAPIView):
             {"detail": "User registered successfully. Verification email sent."},
             status=status.HTTP_201_CREATED,
         )
-    
+
+
 class RegisterAdminView(generics.CreateAPIView):
     """
     post:
@@ -178,22 +191,32 @@ class RegisterAdminView(generics.CreateAPIView):
         )
 
         verify_path = reverse("auth-verify-email")
-        verify_url = f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
+        verify_url = (
+            f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
+        )
         full_name = user.get_full_name()
         send_verification_email.delay(user.email, verify_url, full_name)
 
     @swagger_auto_schema(
         operation_summary="Register an admin user (Temporary Endpoint)",
-        operation_description="Create a new admin user account and send a verification email. This endpoint is only temporary and will be disabled soon.",
+        operation_description=(
+            "Create a new admin user account and send a verification email."
+            " This endpoint is only temporary and will be disabled soon."
+        ),
         tags=["Auth - Registration"],
         request_body=RegisterAdminSerializer,
         responses={
             201: openapi.Response(
-                description="Admin registered successfully. Verification email sent.",
+                description=(
+                    "Admin registered successfully. Verification email sent."
+                ),
                 schema=DetailResponseSerializer,
                 examples={
                     "application/json": {
-                        "detail": "Admin registered successfully. Verification email sent."
+                        "detail": (
+                            "Admin registered successfully. "
+                            "Verification email sent."
+                        )
                     }
                 },
             ),
@@ -214,12 +237,13 @@ class RegisterAdminView(generics.CreateAPIView):
         """
         if not settings.ENABLE_ADMIN_REGISTRATION:
             raise PermissionDenied("Admin registration is currently disabled.")
-        
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         return Response(
-            {"detail": "Admin registered successfully. Verification email sent."},
+            {"detail": (
+                "Admin registered successfully. Verification email sent."
+            )},
             status=status.HTTP_201_CREATED,
         )
 
@@ -243,7 +267,9 @@ class VerifyEmailView(APIView):
 
         if payload.get("token_type") != "email":
             return Response(
-                {"detail": "Invalid token type"}, status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Invalid token type"}, status=(
+                    status.HTTP_400_BAD_REQUEST
+                )
             )
 
         jti = str(payload.get("jti"))
@@ -270,12 +296,16 @@ class VerifyEmailView(APIView):
         user.is_active = True
         user.save()
         return Response(
-            {"detail": "Email verified successfully"}, status=status.HTTP_200_OK
+            {"detail": "Email verified successfully"}, status=(
+                status.HTTP_200_OK
+            )
         )
 
     @swagger_auto_schema(
         operation_summary="Verify email (GET)",
-        operation_description="Verify user email using the token from query parameters.",
+        operation_description=(
+            "Verify user email using the token from query parameters."
+        ),
         tags=["Auth - Email Verification"],
     )
     def get(self, request, *args, **kwargs):
@@ -294,13 +324,17 @@ class VerifyEmailView(APIView):
                 description="Email verified successfully.",
                 schema=DetailResponseSerializer,
                 examples={
-                    "application/json": {"detail": "Email verified successfully."}
+                    "application/json": {"detail": (
+                        "Email verified successfully."
+                    )}
                 },
             ),
             400: openapi.Response(
                 description="Invalid or expired token.",
                 schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "Invalid or expired token."}},
+                examples={"application/json": {"detail": (
+                    "Invalid or expired token."
+                )}},
             ),
             404: openapi.Response(
                 description="User not found.",
@@ -325,20 +359,26 @@ class ResendVerificationEmailView(APIView):
 
     @swagger_auto_schema(
         operation_summary="Resend verification email",
-        operation_description="Send a new email verification link to an unverified user.",
+        operation_description=(
+            "Send a new email verification link to an unverified user."
+        ),
         tags=["Auth - Email Verification"],
         request_body=ResendEmailVerificationSerializer,
         responses={
             200: openapi.Response(
                 description="Verification email resent.",
                 schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "Verification email resent."}},
+                examples={"application/json": {"detail": (
+                    "Verification email resent."
+                )}},
             ),
             400: openapi.Response(
                 description="Invalid request or user already verified.",
                 schema=DetailResponseSerializer,
                 examples={
-                    "application/json": {"detail": "Email already verified or invalid."}
+                    "application/json": {"detail": (
+                        "Email already verified or invalid."
+                    )}
                 },
             ),
         },
@@ -370,7 +410,9 @@ class ResendVerificationEmailView(APIView):
             ttl=EmailVerificationToken.lifetime,
         )
         verify_path = reverse("auth-verify-email")
-        verify_url = f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
+        verify_url = (
+            f"{settings.PUBLIC_BASE_URL}{verify_path}?token={str(token)}"
+        )
         full_name = user.get_full_name()
         send_verification_email.delay(user.email, verify_url, full_name)
 
@@ -400,17 +442,17 @@ class ProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
-    
+
     @swagger_auto_schema(
         operation_summary="Get authenticated user profile",
-        operation_description="Retrieve the profile of the authenticated user.",
+        operation_description="Retrieve profile of the authenticated user.",
         tags=["Auth - User Profile"],
     )
     def get(self, request, *args, **kwargs):
         user = self.get_object()
         serializer = self.get_serializer(user)
         return Response(serializer.data)
-    
+
     @swagger_auto_schema(
         operation_summary="Update authenticated user profile",
         operation_description="Update the profile of the authenticated user.",
@@ -423,7 +465,7 @@ class ProfileView(generics.RetrieveUpdateAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
-    
+
     @swagger_auto_schema(
         operation_summary="Replace authenticated user profile",
         operation_description="Replace the profile of the authenticated user.",
@@ -483,13 +525,17 @@ class ChangePasswordView(APIView):
                 description="Password updated successfully.",
                 schema=DetailResponseSerializer,
                 examples={
-                    "application/json": {"detail": "Password updated successfully."}
+                    "application/json": {"detail": (
+                        "Password updated successfully."
+                    )}
                 },
             ),
             400: openapi.Response(
                 description="Invalid old password or bad payload.",
                 schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "Old password is incorrect."}},
+                examples={"application/json": {"detail": (
+                    "Old password is incorrect."
+                )}},
             ),
         },
     )
@@ -507,7 +553,9 @@ class ChangePasswordView(APIView):
         user.set_password(serializer.validated_data["new_password"])
         user.save()
         return Response(
-            {"detail": "Password updated successfully."}, status=status.HTTP_200_OK
+            {"detail": "Password updated successfully."}, status=(
+                status.HTTP_200_OK
+            )
         )
 
 
@@ -531,7 +579,9 @@ class PasswordResetRequestView(APIView):
             200: openapi.Response(
                 description="Password reset email sent.",
                 schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "Password reset email sent."}},
+                examples={"application/json": {"detail": (
+                    "Password reset email sent."
+                )}},
             ),
             400: openapi.Response(
                 description="Invalid email or payload.",
@@ -559,7 +609,11 @@ class PasswordResetRequestView(APIView):
             )
         if user.is_active is False:
             return Response(
-                {"detail": "User account is not active. Check your email for verification link or request for another one."},
+                {"detail": (
+                    "User account is not active. "
+                    "Check your email for verification link "
+                    "or request for another one."
+                )},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         token = PasswordResetToken.for_user(user)
@@ -571,7 +625,9 @@ class PasswordResetRequestView(APIView):
         )
 
         reset_path = reverse("auth-reset-password-confirm")
-        reset_url = f"{settings.PUBLIC_BASE_URL}{reset_path}?token={str(token)}"
+        reset_url = (
+            f"{settings.PUBLIC_BASE_URL}{reset_path}?token={str(token)}"
+        )
         full_name = user.get_full_name()
         send_password_reset_email.delay(user.email, reset_url, full_name)
         return Response(
@@ -599,12 +655,16 @@ class PasswordResetConfirmView(APIView):
             200: openapi.Response(
                 description="Password reset successful.",
                 schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "Password reset successful."}},
+                examples={"application/json": {"detail": (
+                    "Password reset successful."
+                )}},
             ),
             400: openapi.Response(
                 description="Invalid or expired token / bad payload.",
                 schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "Invalid or expired token."}},
+                examples={"application/json": {"detail": (
+                    "Invalid or expired token."
+                )}},
             ),
             404: openapi.Response(
                 description="User not found.",
@@ -624,7 +684,8 @@ class PasswordResetConfirmView(APIView):
     @swagger_auto_schema(
         operation_summary="Verify password reset token (GET)",
         operation_description=(
-            "Verify the password reset token from a link (e.g., email link click). "
+            "Verify the password reset token from a link ("
+            "e.g., email link click). "
             "This does not change the password, just verifies the token."
         ),
         tags=["Auth - Password Reset"],
@@ -639,7 +700,9 @@ class PasswordResetConfirmView(APIView):
             )
         ],
         responses={
-            200: openapi.Response(description="Token is valid. You may proceed."),
+            200: openapi.Response(
+                description="Token is valid. You may proceed."
+            ),
             400: openapi.Response(description="Invalid or expired token."),
         },
     )
@@ -655,7 +718,9 @@ class PasswordResetConfirmView(APIView):
             token, new_password=None, dry_run=True
         )
 
-    def _verify_token_and_reset_password(self, token, new_password=None, dry_run=False):
+    def _verify_token_and_reset_password(
+            self, token, new_password=None, dry_run=False
+    ):
         try:
             payload = UntypedToken(token)
         except TokenError:
@@ -666,7 +731,9 @@ class PasswordResetConfirmView(APIView):
 
         if payload.get("token_type") != "password_reset":
             return Response(
-                {"detail": "Invalid token type."}, status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Invalid token type."}, status=(
+                    status.HTTP_400_BAD_REQUEST
+                )
             )
 
         jti = str(payload.get("jti"))
@@ -687,7 +754,9 @@ class PasswordResetConfirmView(APIView):
             )
 
         if dry_run:
-            return Response({"detail": "Token is valid."}, status=status.HTTP_200_OK)
+            return Response(
+                {"detail": "Token is valid."}, status=status.HTTP_200_OK
+            )
 
         user.set_password(new_password)
         user.save()
@@ -703,7 +772,9 @@ class ProductViewSet(viewsets.ModelViewSet):
     """
 
     queryset = (
-        Product.objects.all().select_related("category").prefetch_related("images")
+        Product.objects.all().select_related(
+            "category"
+        ).prefetch_related("images")
     )
     serializer_class = ProductDetailSerializer
     permission_classes = [IsAdminOrReadOnly]
@@ -725,7 +796,10 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_summary="Retrieve a product with paginated images",
-        operation_description="Fetch a single product by ID and include paginated images in the response.",
+        operation_description=(
+            "Fetch a single product by ID and "
+            "include paginated images in the response."
+        ),
         tags=["Products"],
         responses={200: ProductDetailSerializer},
     )
@@ -739,14 +813,18 @@ class ProductViewSet(viewsets.ModelViewSet):
         image_serializer = ProductImageSerializer(
             paginated_images, many=True, context={"request": request}
         )
-        paginated_response = paginator.get_paginated_response(image_serializer.data)
+        paginated_response = paginator.get_paginated_response(
+            image_serializer.data
+        )
 
         product_data["images"] = paginated_response.data
         return Response(product_data)
 
     @swagger_auto_schema(
         operation_summary="Create a new product",
-        operation_description="Create a new product entry. Only admins can perform this action.",
+        operation_description=(
+            "Create a new product entry. Only admins can perform this action."
+        ),
         tags=["Products"],
         request_body=ProductDetailSerializer,
         responses={201: ProductDetailSerializer},
@@ -756,7 +834,10 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_summary="Update an existing product",
-        operation_description="Fully update a product by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Fully update a product by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Products"],
         request_body=ProductDetailSerializer,
         responses={200: ProductDetailSerializer},
@@ -766,7 +847,10 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_summary="Partially update a product",
-        operation_description="Partially update fields of a product by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Partially update fields of a product by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Products"],
         request_body=ProductDetailSerializer,
         responses={200: ProductDetailSerializer},
@@ -776,7 +860,9 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_summary="Delete a product",
-        operation_description="Delete a product by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Delete a product by its ID. Only admins can perform this action."
+        ),
         tags=["Products"],
         responses={204: "No Content"},
     )
@@ -785,7 +871,11 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_summary="List all products",
-        operation_description="Retrieve a paginated list of products. Supports filtering by category and price, searching by name and description, and ordering.",
+        operation_description=(
+            "Retrieve a paginated list of products. "
+            "Supports filtering by category and price, "
+            "searching by name and description, and ordering."
+        ),
         tags=["Products"],
         responses={200: ProductListSerializer(many=True)},
     )
@@ -809,7 +899,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(
         operation_summary="List all categories",
-        operation_description="Retrieve a paginated list of product categories.",
+        operation_description="Retrieve paginated list of product categories.",
         tags=["Categories"],
         responses={200: CategorySerializer(many=True)},
     )
@@ -828,54 +918,70 @@ class CategoryViewSet(viewsets.ModelViewSet):
         product_serializer = ProductListSerializer(
             paginated_products, many=True, context={"request": request}
         )
-        paginated_response = paginator.get_paginated_response(product_serializer.data)
+        paginated_response = paginator.get_paginated_response(
+            product_serializer.data
+        )
 
         # Inject into main response
         category_data["products"] = paginated_response.data
         return Response(category_data)
-    
+
     @swagger_auto_schema(
         operation_summary="Create a new category",
-        operation_description="Create a new product category. Only admins can perform this action.",
+        operation_description=(
+            "Create a new product category. "
+            "Only admins can perform this action."
+        ),
         tags=["Categories"],
         request_body=CategorySerializer,
         responses={201: CategorySerializer},
     )
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Update an existing category",
-        operation_description="Fully update a product category by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Fully update a product category by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Categories"],
         request_body=CategorySerializer,
         responses={200: CategorySerializer},
     )
     def update(self, request, *args, **kwargs):
         return super().update(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Partially update a category",
-        operation_description="Partially update fields of a product category by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Partially update fields of a product category by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Categories"],
         request_body=CategorySerializer,
         responses={200: CategorySerializer},
     )
     def partial_update(self, request, *args, **kwargs):
         return super().partial_update(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Delete a category",
-        operation_description="Delete a product category by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Delete a product category by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Categories"],
         responses={204: "No Content"},
     )
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="List all categories",
-        operation_description="Retrieve a paginated list of product categories.",
+        operation_description=(
+            "Retrieve a paginated list of product categories."
+        ),
         tags=["Categories"],
         responses={200: CategorySerializer(many=True)},
     )
@@ -902,7 +1008,7 @@ class ProductImageViewSet(viewsets.ModelViewSet):
     )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Retrieve a product image",
         operation_description="Get details of a specific product image by ID.",
@@ -911,40 +1017,52 @@ class ProductImageViewSet(viewsets.ModelViewSet):
     )
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Create a new product image",
-        operation_description="Upload a new image for a product. Only admins can perform this action.",
+        operation_description=(
+            "Upload a new image for a product. "
+            "Only admins can perform this action."
+        ),
         tags=["Product Images"],
         request_body=ProductImageSerializer,
         responses={201: ProductImageSerializer},
     )
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Update an existing product image",
-        operation_description="Fully update a product image by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Fully update a product image by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Product Images"],
         request_body=ProductImageSerializer,
         responses={200: ProductImageSerializer},
     )
     def update(self, request, *args, **kwargs):
         return super().update(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Partially update a product image",
-        operation_description="Partially update fields of a product image by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Partially update fields of a product image by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Product Images"],
         request_body=ProductImageSerializer,
         responses={200: ProductImageSerializer},
     )
     def partial_update(self, request, *args, **kwargs):
         return super().partial_update(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_summary="Delete a product image",
-        operation_description="Delete a product image by its ID. Only admins can perform this action.",
+        operation_description=(
+            "Delete a product image by its ID. "
+            "Only admins can perform this action."
+        ),
         tags=["Product Images"],
         responses={204: "No Content"},
     )
@@ -952,16 +1070,19 @@ class ProductImageViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
-class CustomTokenObtainPairView(TokenObtainPairView):
-    @swagger_auto_schema(
-        operation_summary="Obtain JWT token pair",
-        operation_description="Provide email and password to receive access and refresh tokens.",
-        tags=["Auth - JWT"],
-        request_body=TokenObtainPairSerializer,
-        responses={200: TokenObtainPairSerializer}
-    )
-    def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+# class CustomTokenObtainPairView(TokenObtainPairView):
+#     @swagger_auto_schema(
+#         operation_summary="Obtain JWT token pair",
+#         operation_description=(
+#             "Provide email and password to receive access and refresh tokens."
+#         ),
+#         tags=["Auth - JWT"],
+#         request_body=TokenObtainPairSerializer,
+#         responses={200: TokenObtainPairSerializer}
+#     )
+#     def post(self, request, *args, **kwargs):
+#         return super().post(request, *args, **kwargs)
+
 
 class CustomTokenRefreshView(TokenRefreshView):
     @swagger_auto_schema(
