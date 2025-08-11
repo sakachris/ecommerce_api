@@ -3,10 +3,12 @@
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.utils.urls import replace_query_param
+from django.conf import settings
 
 
 class ProductPagination(PageNumberPagination):
-    page_size = 5
+    # page_size = 5
+    page_size = settings.PRODUCT_PAGE_SIZE
     page_size_query_param = "page_size"
     max_page_size = 100
 
@@ -36,7 +38,8 @@ class ProductPagination(PageNumberPagination):
 
 
 class CategoryPagination(PageNumberPagination):
-    page_size = 4
+    # page_size = 4
+    page_size = settings.CATEGORY_PAGE_SIZE
     page_size_query_param = "page_size"
     max_page_size = 100
 
@@ -66,7 +69,8 @@ class CategoryPagination(PageNumberPagination):
 
 
 class ProductImagePagination(PageNumberPagination):
-    page_size = 3
+    # page_size = 3
+    page_size = settings.PRODUCT_IMAGE_PAGE_SIZE
     page_size_query_param = "page_size"
     max_page_size = 100
 

@@ -3,16 +3,14 @@ from datetime import timedelta
 from django.conf import settings
 from rest_framework_simplejwt.tokens import Token
 
+
 class EmailVerificationToken(Token):
     token_type = 'email'
-    # use project-level setting to control lifetime
     lifetime = settings.EMAIL_VERIFICATION_TOKEN_LIFETIME
 
     @classmethod
     def for_user(cls, user):
         token = super().for_user(user)
-        # You can add extra claims here if needed:
-        # token['email'] = user.email
         return token
 
 

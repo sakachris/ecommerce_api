@@ -1,5 +1,6 @@
 from rest_framework import permissions
 
+
 class IsAdminOrReadOnly(permissions.BasePermission):
     """
     Custom permission to allow only admin users to edit/delete, while others can only read.

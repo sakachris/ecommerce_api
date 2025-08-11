@@ -7,7 +7,7 @@ from django.contrib.auth.models import (
 )
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
-
+from storages.backends.s3boto3 import S3Boto3Storage
 
 class UserRole(models.TextChoices):
     GUEST = "guest", "Guest"
@@ -135,7 +135,14 @@ class ProductImage(models.Model):
     product = models.ForeignKey(
         Product, related_name="images", on_delete=models.CASCADE, db_index=True
     )
-    image_url = models.URLField(max_length=500)
+    # image_url = models.URLField(max_length=500)
+    # image = models.ImageField(upload_to="products/", null=True, blank=True)
+    image = models.ImageField(
+        storage=S3Boto3Storage(),
+        upload_to="products/",
+        null=True,
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_primary = models.BooleanField(default=False)
