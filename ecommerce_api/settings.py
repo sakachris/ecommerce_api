@@ -83,10 +83,15 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
         "rest_framework.throttling.AnonRateThrottle",
     ],
+    # "DEFAULT_THROTTLE_RATES": {
+    #     "user": "200/min",
+    #     "anon": "50/min",
+    #     "resend_verification": "2/hour",
+    # },
     "DEFAULT_THROTTLE_RATES": {
-        "user": "200/min",
-        "anon": "50/min",
-        "resend_verification": "2/hour",
+        "user": env("THROTTLE_RATE_USER", default="200/min"),
+        "anon": env("THROTTLE_RATE_ANON", default="50/min"),
+        "resend_verification": env("THROTTLE_RATE_RESEND", default="2/hour"),
     },
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
