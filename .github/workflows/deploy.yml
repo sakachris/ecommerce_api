@@ -2,9 +2,9 @@ name: Build, Push, Restart Deployment and Notify
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 # Concurrency: one deployment per branch at a time
 concurrency:
@@ -34,7 +34,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: sakachris/ecom-api:latest-staging
+          tags: |
+            sakachris/ecom-api:latest-staging
+            sakachris/ecom-api:staging-${{ github.sha }}
 
       - name: Set up kubectl
         if: success()
@@ -42,6 +44,17 @@ jobs:
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 --decode > kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
           kubectl get nodes
+
+      - name: Update production image tag in K8s
+        if: success()
+        run: |
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl set image deployment/ecom-backend-staging \
+            ecom-api-staging=sakachris/ecom-api:staging-${{ github.sha }} \
+            -n ecom-api
+          kubectl set image deployment/ecom-celery-worker-staging \
+            celery-worker-staging=sakachris/ecom-api:staging-${{ github.sha }} \
+            -n ecom-api
 
       - name: Restart staging deployments
         if: success()
