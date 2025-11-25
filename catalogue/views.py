@@ -1,6 +1,7 @@
 # catalogue/views.py
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import Avg, Count
 from django.urls import reverse
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
@@ -24,10 +25,11 @@ from rest_framework_simplejwt.views import (
 from ecommerce_api.pagination.custom import (
     CategoryPagination,
     ProductImagePagination,
-    ProductPagination
+    ProductPagination,
+    ReviewPagination
 )
 
-from .models import Category, Product, ProductImage
+from .models import Category, Product, ProductImage, Review
 from .permissions import IsAdminOrReadOnly
 from .redis_token_store import RedisTokenStore
 from .serializers import (
@@ -41,7 +43,8 @@ from .serializers import (
     ProductListSerializer, RegisterAdminSerializer,
     RegisterSerializer,
     ResendEmailVerificationSerializer, UserSerializer,
-    VerifyEmailSerializer
+    VerifyEmailSerializer,
+    ReviewSerializer
 )
 from .tasks import (
     send_account_deleted_email,
@@ -775,10 +778,18 @@ class ProductViewSet(viewsets.ModelViewSet):
     Provides listing, detail view, and filtering capabilities.
     """
 
+    # queryset = (
+    #     Product.objects.all().select_related(
+    #         "category"
+    #     ).prefetch_related("images")
+    # )
     queryset = (
-        Product.objects.all().select_related(
-            "category"
-        ).prefetch_related("images")
+        Product.objects.annotate(
+            average_rating=Avg("reviews__rating"),
+            reviews_count=Count("reviews")
+        )
+        .select_related("category")
+        .prefetch_related("images")
     )
     serializer_class = ProductDetailSerializer
     permission_classes = [IsAdminOrReadOnly]
@@ -787,7 +798,6 @@ class ProductViewSet(viewsets.ModelViewSet):
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    # filterset_fields = ["category", "price"]
     filterset_fields = {
         "category": ["exact"],
         "price": ["exact", "lt", "lte", "gt", "gte"],
@@ -803,10 +813,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         return ProductDetailSerializer
 
     @swagger_auto_schema(
-        operation_summary="Retrieve a product with paginated images",
+        operation_summary="Retrieve a product by ID",
         operation_description=(
             "Fetch a single product by ID and "
-            "include paginated images in the response."
         ),
         tags=["Products"],
         responses={200: ProductDetailSerializer},
@@ -815,17 +824,6 @@ class ProductViewSet(viewsets.ModelViewSet):
         product = self.get_object()
         product_data = self.get_serializer(product).data
 
-        images = product.images.all()
-        paginator = ProductImagePagination()
-        paginated_images = paginator.paginate_queryset(images, request)
-        image_serializer = ProductImageSerializer(
-            paginated_images, many=True, context={"request": request}
-        )
-        paginated_response = paginator.get_paginated_response(
-            image_serializer.data
-        )
-
-        product_data["images"] = paginated_response.data
         return Response(product_data)
 
     @swagger_auto_schema(
@@ -1007,6 +1005,21 @@ class ProductImageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     pagination_class = ProductImagePagination
     parser_classes = (MultiPartParser, FormParser)
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = {"product": ["exact"]}
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]
+
+    def get_permissions(self):
+        """
+        Allow anyone to list or retrieve product images.
+        Only admin users can create, update, partial_update or destroy.
+        """
+        # AllowAny for read actions
+        if getattr(self, 'action', None) in ("list", "retrieve"):
+            return [permissions.AllowAny()]
+        # Default to admin-only for other actions
+        return [IsAdminUser()]
 
     @swagger_auto_schema(
         operation_summary="List all product images",
@@ -1075,6 +1088,93 @@ class ProductImageViewSet(viewsets.ModelViewSet):
         responses={204: "No Content"},
     )
     def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for product reviews.
+    - Anyone can list and retrieve reviews.
+    - Authenticated users can create reviews (user will be set to request.user).
+    - Only the review owner or staff can update or delete a review.
+    Supports optional filtering by `product` query parameter.
+    """
+
+    queryset = Review.objects.all().select_related("product", "user")
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    pagination_class = ReviewPagination
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = {"product": ["exact"], "rating": ["exact", "gte", "lte"]}
+    ordering_fields = ["created_at", "rating"]
+    ordering = ["-created_at"]
+
+    @swagger_auto_schema(
+        operation_summary="List all reviews",
+        operation_description=(
+            "Retrieve a paginated list of product reviews. "
+            "Supports filtering by product and rating."
+        ),
+        tags=["Reviews"],
+        responses={200: ReviewSerializer(many=True)},
+    )
+    def get_queryset(self):
+        qs = super().get_queryset()
+        product = self.request.query_params.get("product")
+        if product:
+            qs = qs.filter(product__product_id=product) if "-" in product else qs.filter(product=product)
+        return qs
+
+    @swagger_auto_schema(
+        operation_summary="Create a new review",
+        operation_description=(
+            "Create a new review for a product. "
+            "The authenticated user will be set as the review author."
+        ),
+        tags=["Reviews"],
+        request_body=ReviewSerializer,
+        responses={201: ReviewSerializer},
+    )
+    def perform_create(self, serializer):
+        # Ensure the authenticated user is recorded as the review author.
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(user=user)
+
+    @swagger_auto_schema(
+        operation_summary="Update an existing review",
+        operation_description=(
+            "Update a review by its ID. "
+            "Only the review owner or staff can perform this action."
+        ),
+        tags=["Reviews"],
+        request_body=ReviewSerializer,
+        responses={200: ReviewSerializer},
+    )
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        user = self.request.user
+        if instance.user and instance.user != user and not user.is_staff:
+            raise PermissionDenied("You do not have permission to modify this review.")
+        if not instance.user and not user.is_staff:
+            raise PermissionDenied("Only staff can modify anonymous reviews.")
+        serializer.save()
+
+    @swagger_auto_schema(
+        operation_summary="Delete a review",
+        operation_description=(
+            "Delete a review by its ID. "
+            "Only the review owner or staff can perform this action."
+        ),
+        tags=["Reviews"],
+        responses={204: "No Content"},
+    )
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        user = request.user
+        if instance.user and instance.user != user and not user.is_staff:
+            raise PermissionDenied("You do not have permission to delete this review.")
+        if not instance.user and not user.is_staff:
+            raise PermissionDenied("Only staff can delete anonymous reviews.")
         return super().destroy(request, *args, **kwargs)
 
 

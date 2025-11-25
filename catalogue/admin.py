@@ -10,6 +10,7 @@ from .models import (
     RequestLog,
     User
 )
+from .models import Review
 
 
 @admin.register(User)
@@ -144,3 +145,15 @@ class BlockedIPAdmin(admin.ModelAdmin):
     list_display = ('ip_address',)
     ordering = ('ip_address',)
     search_fields = ('ip_address',)
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    """
+    Admin interface for product reviews.
+    """
+    list_display = ("review_id", "product", "user", "rating", "created_at", "updated_at")
+    list_filter = ("rating",)
+    search_fields = ("product__name", "user__email", "comment")
+    ordering = ("-created_at",)
+    raw_id_fields = ("product", "user")

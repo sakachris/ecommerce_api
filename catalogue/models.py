@@ -7,6 +7,7 @@ from django.contrib.auth.models import (
 )
 from django.db import models
 from django.db.models import Q
+from django.core.validators import MinValueValidator, MaxValueValidator
 from storages.backends.s3boto3 import S3Boto3Storage
 
 
@@ -203,6 +204,50 @@ class ProductImage(models.Model):
             f"{'Primary' if self.is_primary else 'Secondary'} "
             f"Image of {self.product.name}"
         )
+
+
+class Review(models.Model):
+    """
+    Model representing a product review.
+    Captures a rating (1-5), optional comment, and links to product and user.
+    """
+    review_id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, db_index=True
+    )
+    product = models.ForeignKey(
+        Product, related_name="reviews", on_delete=models.CASCADE, db_index=True
+    )
+    user = models.ForeignKey(
+        User,
+        related_name="reviews",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    comment = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["product", "user", "rating"]),
+        ]
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["product", "user"],
+                condition=Q(user__isnull=False),
+                name="unique_user_product_review",
+            )
+        ]
+
+    def __str__(self):
+        user_repr = self.user.email if self.user else "Anonymous"
+        return f"Review {self.rating} for {self.product.name} by {user_repr}"
 
 
 class BlockedIP(models.Model):
