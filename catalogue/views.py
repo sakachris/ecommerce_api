@@ -2,7 +2,9 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Avg, Count
+from django.shortcuts import redirect
 from django.urls import reverse
+from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
@@ -53,6 +55,8 @@ from .tasks import (
 )
 from .throttles import ResendVerificationThrottle
 from .tokens import EmailVerificationToken, PasswordResetToken
+from .filters import ProductFilter
+import base64
 
 User = get_user_model()
 redis_store = RedisTokenStore()
@@ -169,7 +173,7 @@ class RegisterView(generics.CreateAPIView):
         self.perform_create(serializer)
         return Response(
             {"detail": (
-                "User registered successfully. Verification email sent."
+                "User registered successfully. Verification email sent. Open your email to verify your account."
             )},
             status=status.HTTP_201_CREATED,
         )
@@ -254,7 +258,6 @@ class RegisterAdminView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED,
         )
 
-
 class VerifyEmailView(APIView):
     permission_classes = (permissions.AllowAny,)
     """    get:
@@ -263,97 +266,192 @@ class VerifyEmailView(APIView):
     Verify user email using the token from request body.
     """
 
-    def _verify_token(self, token):
+    def _process_verification(self, token):
+        """Returns tuple: (status_str, user or None)"""
+
+        # Invalid token format
         try:
             payload = UntypedToken(token)
         except TokenError:
-            return Response(
-                {"detail": "Invalid or expired token"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return ("invalid", None)
 
+        # Wrong token type
         if payload.get("token_type") != "email":
-            return Response(
-                {"detail": "Invalid token type"}, status=(
-                    status.HTTP_400_BAD_REQUEST
-                )
-            )
+            return ("invalid", None)
 
         jti = str(payload.get("jti"))
         user_id = payload.get("user_id")
 
-        if not redis_store.pop("email", jti):
-            return Response(
-                {"detail": "Token already used or not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        # User does not exist
         try:
             user = User.objects.get(user_id=user_id)
         except User.DoesNotExist:
-            return Response(
-                {"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+            return ("invalid_user", None)
 
+        # Already verified
         if user.is_active:
-            return Response(
-                {"detail": "Email already verified"}, status=status.HTTP_200_OK
-            )
+            return ("already", user)
 
+        # Token not found in Redis → already used or expired
+        if not redis_store.pop("email", jti):
+            return ("expired", user)
+
+        # Mark verified
         user.is_active = True
         user.save()
-        return Response(
-            {"detail": "Email verified successfully"}, status=(
-                status.HTTP_200_OK
-            )
+
+        return ("success", user)
+
+    # ----------------------
+    # GET → redirect
+    # ----------------------
+    def get(self, request):
+        token = request.GET.get("token")
+        status_code, user = self._process_verification(token)
+
+        # Build the redirect URL dynamically
+        redirect_url = settings.FRONTEND_EMAIL_VERIFIED_REDIRECT_URL
+
+        params = {
+            "success": "?verified=true",
+            "already": "?already=true",
+            "expired": "?expired=true",
+            "invalid": "?invalid=true",
+            "invalid_user": "?invalid=true",
+        }
+
+        # return redirect(f"{redirect_url}{params.get(status_code, '?error=true')}")
+        status_param = params.get(status_code, '?error=true')
+        separator = '&' if '?' in status_param else '?'
+
+        if user is None:
+            return redirect(f"{redirect_url}{status_param}")
+        
+        encoded_email = base64.urlsafe_b64encode(user.email.encode()).decode()
+
+        return redirect(
+            f"{redirect_url}{status_param}{separator}email={encoded_email}"
         )
 
-    @swagger_auto_schema(
-        operation_summary="Verify email (GET)",
-        operation_description=(
-            "Verify user email using the token from query parameters."
-        ),
-        tags=["Auth - Email Verification"],
-    )
-    def get(self, request, *args, **kwargs):
-        data = {"token": request.query_params.get("token")}
-        serializer = VerifyEmailSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        return self._verify_token(serializer.validated_data["token"])
 
-    @swagger_auto_schema(
-        operation_summary="Verify email (POST)",
-        operation_description="Verify user email using the provided token.",
-        tags=["Auth - Email Verification"],
-        request_body=VerifyEmailSerializer,
-        responses={
-            200: openapi.Response(
-                description="Email verified successfully.",
-                schema=DetailResponseSerializer,
-                examples={
-                    "application/json": {"detail": (
-                        "Email verified successfully."
-                    )}
-                },
-            ),
-            400: openapi.Response(
-                description="Invalid or expired token.",
-                schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": (
-                    "Invalid or expired token."
-                )}},
-            ),
-            404: openapi.Response(
-                description="User not found.",
-                schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "User not found."}},
-            ),
-        },
-    )
-    def post(self, request, *args, **kwargs):
-        serializer = VerifyEmailSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return self._verify_token(serializer.validated_data["token"])
+    # ----------------------
+    # POST → JSON API response
+    # ----------------------
+    def post(self, request):
+        token = request.data.get("token")
+        status_code, user = self._process_verification(token)
+
+        messages = {
+            "success": ("Email verified successfully", status.HTTP_200_OK),
+            "already": ("Email already verified", status.HTTP_200_OK),
+            "expired": ("Token expired or already used", status.HTTP_400_BAD_REQUEST),
+            "invalid": ("Invalid or malformed token", status.HTTP_400_BAD_REQUEST),
+            "invalid_user": ("User not found", status.HTTP_404_NOT_FOUND),
+        }
+
+        msg, code = messages.get(status_code, ("Unknown error", 400))
+        return Response({"detail": msg}, status=code)
+
+# class VerifyEmailView(APIView):
+#     permission_classes = (permissions.AllowAny,)
+#     """    get:
+#     Verify user email using the token from query parameters.
+#     post:
+#     Verify user email using the token from request body.
+#     """
+
+#     def _verify_token(self, token):
+#         try:
+#             payload = UntypedToken(token)
+#         except TokenError:
+#             return Response(
+#                 {"detail": "Invalid or expired token"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         if payload.get("token_type") != "email":
+#             return Response(
+#                 {"detail": "Invalid token type"}, status=(
+#                     status.HTTP_400_BAD_REQUEST
+#                 )
+#             )
+
+#         jti = str(payload.get("jti"))
+#         user_id = payload.get("user_id")
+
+#         if not redis_store.pop("email", jti):
+#             return Response(
+#                 {"detail": "Token already used or not found."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             user = User.objects.get(user_id=user_id)
+#         except User.DoesNotExist:
+#             return Response(
+#                 {"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         if user.is_active:
+#             return Response(
+#                 {"detail": "Email already verified"}, status=status.HTTP_200_OK
+#             )
+
+#         user.is_active = True
+#         user.save()
+#         # return redirect(settings.FRONTEND_EMAIL_VERIFIED_REDIRECT_URL)
+#         return Response(
+#             {"detail": "Email verified successfully"}, status=(
+#                 status.HTTP_200_OK
+#             )
+#         )
+
+#     @swagger_auto_schema(
+#         operation_summary="Verify email (GET)",
+#         operation_description=(
+#             "Verify user email using the token from query parameters."
+#         ),
+#         tags=["Auth - Email Verification"],
+#     )
+#     def get(self, request, *args, **kwargs):
+#         data = {"token": request.query_params.get("token")}
+#         serializer = VerifyEmailSerializer(data=data)
+#         serializer.is_valid(raise_exception=True)
+#         return self._verify_token(serializer.validated_data["token"])
+
+#     @swagger_auto_schema(
+#         operation_summary="Verify email (POST)",
+#         operation_description="Verify user email using the provided token.",
+#         tags=["Auth - Email Verification"],
+#         request_body=VerifyEmailSerializer,
+#         responses={
+#             200: openapi.Response(
+#                 description="Email verified successfully.",
+#                 schema=DetailResponseSerializer,
+#                 examples={
+#                     "application/json": {"detail": (
+#                         "Email verified successfully."
+#                     )}
+#                 },
+#             ),
+#             400: openapi.Response(
+#                 description="Invalid or expired token.",
+#                 schema=DetailResponseSerializer,
+#                 examples={"application/json": {"detail": (
+#                     "Invalid or expired token."
+#                 )}},
+#             ),
+#             404: openapi.Response(
+#                 description="User not found.",
+#                 schema=DetailResponseSerializer,
+#                 examples={"application/json": {"detail": "User not found."}},
+#             ),
+#         },
+#     )
+#     def post(self, request, *args, **kwargs):
+#         serializer = VerifyEmailSerializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         return self._verify_token(serializer.validated_data["token"])
 
 
 class ResendVerificationEmailView(APIView):
@@ -778,14 +876,10 @@ class ProductViewSet(viewsets.ModelViewSet):
     Provides listing, detail view, and filtering capabilities.
     """
 
-    # queryset = (
-    #     Product.objects.all().select_related(
-    #         "category"
-    #     ).prefetch_related("images")
-    # )
     queryset = (
         Product.objects.annotate(
-            average_rating=Avg("reviews__rating"),
+            # average_rating=Avg("reviews__rating"),
+            average_rating=Coalesce(Avg("reviews__rating"), 0.0),
             reviews_count=Count("reviews")
         )
         .select_related("category")
@@ -798,12 +892,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    filterset_fields = {
-        "category": ["exact"],
-        "price": ["exact", "lt", "lte", "gt", "gte"],
-    }
+    # filterset_fields = {
+    #     "category": ["exact"],
+    #     "price": ["exact", "lt", "lte", "gt", "gte"],
+    # }
+    filterset_class = ProductFilter
     search_fields = ["name", "description"]
-    ordering_fields = ["price", "created_at"]
+    ordering_fields = ["price", "created_at", "average_rating", "reviews_count"]
     ordering = ["-created_at"]
     pagination_class = ProductPagination
 

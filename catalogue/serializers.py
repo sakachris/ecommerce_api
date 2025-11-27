@@ -51,6 +51,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # now that the user is verified, default serializer generate the token
         data = super().validate(attrs)
+        data["first_name"] = user.first_name
+        data["last_name"] = user.last_name
         return data
 
 
