@@ -2,9 +2,9 @@ name: Build, Push, Restart Deployment and Notify
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+  # pull_request:
+  #   branches: [main, develop]
 
 # Concurrency: one deployment per branch at a time
 concurrency:
@@ -14,9 +14,9 @@ concurrency:
 jobs:
   # STAGING JOB
   staging:
-    if: |
-      (github.event_name == 'push' && github.ref_name == 'develop') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'develop')
+    if:
+      (github.event_name == 'push' && github.ref_name == 'develop')
+      # (github.event_name == 'pull_request' && github.base_ref == 'develop')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -34,7 +34,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: sakachris/ecom-api:latest-staging
+          tags: |
+            sakachris/ecom-api:latest-staging
+            sakachris/ecom-api:staging-${{ github.sha }}
 
       - name: Set up kubectl
         if: success()
@@ -42,6 +44,17 @@ jobs:
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 --decode > kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
           kubectl get nodes
+
+      - name: Update production image tag in K8s
+        if: success()
+        run: |
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl set image deployment/ecom-backend-staging \
+            ecom-api-staging=sakachris/ecom-api:staging-${{ github.sha }} \
+            -n ecom-api
+          kubectl set image deployment/ecom-celery-worker-staging \
+            celery-worker-staging=sakachris/ecom-api:staging-${{ github.sha }} \
+            -n ecom-api
 
       - name: Restart staging deployments
         if: success()
@@ -65,7 +78,9 @@ jobs:
           secure: true
           body: |
             The staging deployment for branch 'develop' was successful.
-            Docker tag: latest-staging
+            Docker tags: 
+              latest-staging
+              staging-${{ github.sha }}
             Deployments restarted: ecom-backend-staging, ecom-celery-worker-staging
             Commit: ${{ github.sha }}
             Timestamp: ${{ github.event.head_commit.timestamp }}
@@ -92,9 +107,9 @@ jobs:
 
   # PRODUCTION JOB
   production:
-    if: |
-      (github.event_name == 'push' && github.ref_name == 'main') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    if:
+      (github.event_name == 'push' && github.ref_name == 'main')
+      # (github.event_name == 'pull_request' && github.base_ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
@@ -112,7 +127,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: sakachris/ecom-api:latest-production
+          tags: |
+            sakachris/ecom-api:latest-production
+            sakachris/ecom-api:production-${{ github.sha }}
 
       - name: Set up kubectl
         if: success()
@@ -120,6 +137,17 @@ jobs:
           echo "${{ secrets.KUBECONFIG_DATA }}" | base64 --decode > kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
           kubectl get nodes
+
+      - name: Update production image tag in K8s
+        if: success()
+        run: |
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl set image deployment/ecom-backend \
+            ecom-api=sakachris/ecom-api:production-${{ github.sha }} \
+            -n ecom-api
+          kubectl set image deployment/ecom-celery-worker \
+            celery-worker=sakachris/ecom-api:production-${{ github.sha }} \
+            -n ecom-api
 
       - name: Restart production deployments
         if: success()
@@ -143,7 +171,9 @@ jobs:
           secure: true
           body: |
             The production deployment for branch 'main' was successful.
-            Docker tag: latest-production
+            Docker tags: 
+              latest-production
+              production-${{ github.sha }}
             Deployments restarted: ecom-backend, ecom-celery-worker
             Commit: ${{ github.sha }}
             Timestamp: ${{ github.event.head_commit.timestamp }}

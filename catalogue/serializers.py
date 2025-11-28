@@ -6,7 +6,13 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import Category, Product, ProductImage, UserRole
+from .models import (
+    Category,
+    Product,
+    ProductImage,
+    UserRole,
+    Review,
+)
 
 User = get_user_model()
 
@@ -45,6 +51,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # now that the user is verified, default serializer generate the token
         data = super().validate(attrs)
+        data["first_name"] = user.first_name
+        data["last_name"] = user.last_name
         return data
 
 
@@ -276,6 +284,8 @@ class ProductListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(
         source='category.name', read_only=True
     )
+    average_rating = serializers.FloatField(read_only=True)
+    reviews_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
@@ -286,6 +296,8 @@ class ProductListSerializer(serializers.ModelSerializer):
             "category",
             "category_name",
             "primary_image",
+            "average_rating",
+            "reviews_count",
         ]
 
     def get_primary_image(self, obj):
@@ -299,10 +311,11 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     Serializer for detailed product view.
     Includes all product fields and category name.
     """
-    # images = ProductImageSerializer(many=True, read_only=True)
     category_name = serializers.CharField(
         source='category.name', read_only=True
     )
+    average_rating = serializers.FloatField(read_only=True)
+    reviews_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
@@ -314,9 +327,10 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "description",
             "price",
             "stock_quantity",
+            "average_rating",
+            "reviews_count",
             "created_at",
             "updated_at",
-            # "images",
         ]
 
 
@@ -328,6 +342,57 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["category_id", "name", "description", "created_at"]
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Review model.
+    - `product_name` and `user_email` are read-only convenience fields.
+    - Prevents an authenticated user from creating more than one review
+      per product.
+    """
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    user_email = serializers.CharField(source="user.email", read_only=True)
+
+    class Meta:
+        model = Review
+        fields = [
+            "review_id",
+            "product",
+            "product_name",
+            "user",
+            "user_email",
+            "rating",
+            "comment",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "review_id",
+            "created_at",
+            "updated_at",
+            "product_name",
+            "user_email",
+        ]
+
+    def validate_rating(self, value):
+        if not (1 <= value <= 5):
+            raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
+
+    def validate(self, data):
+        # Prevent duplicate reviews by the same authenticated user
+        user = data.get("user") or getattr(self.instance, "user", None)
+        product = data.get("product") or getattr(self.instance, "product", None)
+
+        # Only enforce uniqueness for non-null users on create
+        if user and not self.instance:
+            if Review.objects.filter(product=product, user=user).exists():
+                raise serializers.ValidationError(
+                    {"non_field_errors": "You have already reviewed this product."}
+                )
+
+        return data
 
 
 # class CategoryDetailSerializer(serializers.ModelSerializer):

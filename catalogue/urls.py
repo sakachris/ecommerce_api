@@ -11,6 +11,7 @@ from .views import (
     PasswordResetRequestView,
     ProductImageViewSet,
     ProductViewSet,
+    ReviewViewSet,
     ProfileView,
     RegisterAdminView,
     RegisterView,
@@ -24,6 +25,7 @@ router.register(r"products", ProductViewSet, basename="products")
 router.register(
     r"product-images", ProductImageViewSet, basename="productimage"
 )
+router.register(r"reviews", ReviewViewSet, basename="reviews")
 
 urlpatterns = [
     # Auth
@@ -77,3 +79,4 @@ urlpatterns = [
     ),
     path("", include(router.urls)),
 ]
+

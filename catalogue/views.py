@@ -1,7 +1,10 @@
 # catalogue/views.py
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import Avg, Count
+from django.shortcuts import redirect
 from django.urls import reverse
+from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
@@ -24,10 +27,11 @@ from rest_framework_simplejwt.views import (
 from ecommerce_api.pagination.custom import (
     CategoryPagination,
     ProductImagePagination,
-    ProductPagination
+    ProductPagination,
+    ReviewPagination
 )
 
-from .models import Category, Product, ProductImage
+from .models import Category, Product, ProductImage, Review
 from .permissions import IsAdminOrReadOnly
 from .redis_token_store import RedisTokenStore
 from .serializers import (
@@ -41,7 +45,8 @@ from .serializers import (
     ProductListSerializer, RegisterAdminSerializer,
     RegisterSerializer,
     ResendEmailVerificationSerializer, UserSerializer,
-    VerifyEmailSerializer
+    VerifyEmailSerializer,
+    ReviewSerializer
 )
 from .tasks import (
     send_account_deleted_email,
@@ -50,6 +55,8 @@ from .tasks import (
 )
 from .throttles import ResendVerificationThrottle
 from .tokens import EmailVerificationToken, PasswordResetToken
+from .filters import ProductFilter
+import base64
 
 User = get_user_model()
 redis_store = RedisTokenStore()
@@ -166,7 +173,7 @@ class RegisterView(generics.CreateAPIView):
         self.perform_create(serializer)
         return Response(
             {"detail": (
-                "User registered successfully. Verification email sent."
+                "User registered successfully. Verification email sent. Open your email to verify your account."
             )},
             status=status.HTTP_201_CREATED,
         )
@@ -251,7 +258,6 @@ class RegisterAdminView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED,
         )
 
-
 class VerifyEmailView(APIView):
     permission_classes = (permissions.AllowAny,)
     """    get:
@@ -260,97 +266,192 @@ class VerifyEmailView(APIView):
     Verify user email using the token from request body.
     """
 
-    def _verify_token(self, token):
+    def _process_verification(self, token):
+        """Returns tuple: (status_str, user or None)"""
+
+        # Invalid token format
         try:
             payload = UntypedToken(token)
         except TokenError:
-            return Response(
-                {"detail": "Invalid or expired token"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return ("invalid", None)
 
+        # Wrong token type
         if payload.get("token_type") != "email":
-            return Response(
-                {"detail": "Invalid token type"}, status=(
-                    status.HTTP_400_BAD_REQUEST
-                )
-            )
+            return ("invalid", None)
 
         jti = str(payload.get("jti"))
         user_id = payload.get("user_id")
 
-        if not redis_store.pop("email", jti):
-            return Response(
-                {"detail": "Token already used or not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        # User does not exist
         try:
             user = User.objects.get(user_id=user_id)
         except User.DoesNotExist:
-            return Response(
-                {"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+            return ("invalid_user", None)
 
+        # Already verified
         if user.is_active:
-            return Response(
-                {"detail": "Email already verified"}, status=status.HTTP_200_OK
-            )
+            return ("already", user)
 
+        # Token not found in Redis → already used or expired
+        if not redis_store.pop("email", jti):
+            return ("expired", user)
+
+        # Mark verified
         user.is_active = True
         user.save()
-        return Response(
-            {"detail": "Email verified successfully"}, status=(
-                status.HTTP_200_OK
-            )
+
+        return ("success", user)
+
+    # ----------------------
+    # GET → redirect
+    # ----------------------
+    def get(self, request):
+        token = request.GET.get("token")
+        status_code, user = self._process_verification(token)
+
+        # Build the redirect URL dynamically
+        redirect_url = settings.FRONTEND_EMAIL_VERIFIED_REDIRECT_URL
+
+        params = {
+            "success": "?verified=true",
+            "already": "?already=true",
+            "expired": "?expired=true",
+            "invalid": "?invalid=true",
+            "invalid_user": "?invalid=true",
+        }
+
+        # return redirect(f"{redirect_url}{params.get(status_code, '?error=true')}")
+        status_param = params.get(status_code, '?error=true')
+        separator = '&' if '?' in status_param else '?'
+
+        if user is None:
+            return redirect(f"{redirect_url}{status_param}")
+        
+        encoded_email = base64.urlsafe_b64encode(user.email.encode()).decode()
+
+        return redirect(
+            f"{redirect_url}{status_param}{separator}email={encoded_email}"
         )
 
-    @swagger_auto_schema(
-        operation_summary="Verify email (GET)",
-        operation_description=(
-            "Verify user email using the token from query parameters."
-        ),
-        tags=["Auth - Email Verification"],
-    )
-    def get(self, request, *args, **kwargs):
-        data = {"token": request.query_params.get("token")}
-        serializer = VerifyEmailSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        return self._verify_token(serializer.validated_data["token"])
 
-    @swagger_auto_schema(
-        operation_summary="Verify email (POST)",
-        operation_description="Verify user email using the provided token.",
-        tags=["Auth - Email Verification"],
-        request_body=VerifyEmailSerializer,
-        responses={
-            200: openapi.Response(
-                description="Email verified successfully.",
-                schema=DetailResponseSerializer,
-                examples={
-                    "application/json": {"detail": (
-                        "Email verified successfully."
-                    )}
-                },
-            ),
-            400: openapi.Response(
-                description="Invalid or expired token.",
-                schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": (
-                    "Invalid or expired token."
-                )}},
-            ),
-            404: openapi.Response(
-                description="User not found.",
-                schema=DetailResponseSerializer,
-                examples={"application/json": {"detail": "User not found."}},
-            ),
-        },
-    )
-    def post(self, request, *args, **kwargs):
-        serializer = VerifyEmailSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return self._verify_token(serializer.validated_data["token"])
+    # ----------------------
+    # POST → JSON API response
+    # ----------------------
+    def post(self, request):
+        token = request.data.get("token")
+        status_code, user = self._process_verification(token)
+
+        messages = {
+            "success": ("Email verified successfully", status.HTTP_200_OK),
+            "already": ("Email already verified", status.HTTP_200_OK),
+            "expired": ("Token expired or already used", status.HTTP_400_BAD_REQUEST),
+            "invalid": ("Invalid or malformed token", status.HTTP_400_BAD_REQUEST),
+            "invalid_user": ("User not found", status.HTTP_404_NOT_FOUND),
+        }
+
+        msg, code = messages.get(status_code, ("Unknown error", 400))
+        return Response({"detail": msg}, status=code)
+
+# class VerifyEmailView(APIView):
+#     permission_classes = (permissions.AllowAny,)
+#     """    get:
+#     Verify user email using the token from query parameters.
+#     post:
+#     Verify user email using the token from request body.
+#     """
+
+#     def _verify_token(self, token):
+#         try:
+#             payload = UntypedToken(token)
+#         except TokenError:
+#             return Response(
+#                 {"detail": "Invalid or expired token"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         if payload.get("token_type") != "email":
+#             return Response(
+#                 {"detail": "Invalid token type"}, status=(
+#                     status.HTTP_400_BAD_REQUEST
+#                 )
+#             )
+
+#         jti = str(payload.get("jti"))
+#         user_id = payload.get("user_id")
+
+#         if not redis_store.pop("email", jti):
+#             return Response(
+#                 {"detail": "Token already used or not found."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             user = User.objects.get(user_id=user_id)
+#         except User.DoesNotExist:
+#             return Response(
+#                 {"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         if user.is_active:
+#             return Response(
+#                 {"detail": "Email already verified"}, status=status.HTTP_200_OK
+#             )
+
+#         user.is_active = True
+#         user.save()
+#         # return redirect(settings.FRONTEND_EMAIL_VERIFIED_REDIRECT_URL)
+#         return Response(
+#             {"detail": "Email verified successfully"}, status=(
+#                 status.HTTP_200_OK
+#             )
+#         )
+
+#     @swagger_auto_schema(
+#         operation_summary="Verify email (GET)",
+#         operation_description=(
+#             "Verify user email using the token from query parameters."
+#         ),
+#         tags=["Auth - Email Verification"],
+#     )
+#     def get(self, request, *args, **kwargs):
+#         data = {"token": request.query_params.get("token")}
+#         serializer = VerifyEmailSerializer(data=data)
+#         serializer.is_valid(raise_exception=True)
+#         return self._verify_token(serializer.validated_data["token"])
+
+#     @swagger_auto_schema(
+#         operation_summary="Verify email (POST)",
+#         operation_description="Verify user email using the provided token.",
+#         tags=["Auth - Email Verification"],
+#         request_body=VerifyEmailSerializer,
+#         responses={
+#             200: openapi.Response(
+#                 description="Email verified successfully.",
+#                 schema=DetailResponseSerializer,
+#                 examples={
+#                     "application/json": {"detail": (
+#                         "Email verified successfully."
+#                     )}
+#                 },
+#             ),
+#             400: openapi.Response(
+#                 description="Invalid or expired token.",
+#                 schema=DetailResponseSerializer,
+#                 examples={"application/json": {"detail": (
+#                     "Invalid or expired token."
+#                 )}},
+#             ),
+#             404: openapi.Response(
+#                 description="User not found.",
+#                 schema=DetailResponseSerializer,
+#                 examples={"application/json": {"detail": "User not found."}},
+#             ),
+#         },
+#     )
+#     def post(self, request, *args, **kwargs):
+#         serializer = VerifyEmailSerializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         return self._verify_token(serializer.validated_data["token"])
 
 
 class ResendVerificationEmailView(APIView):
@@ -776,9 +877,13 @@ class ProductViewSet(viewsets.ModelViewSet):
     """
 
     queryset = (
-        Product.objects.all().select_related(
-            "category"
-        ).prefetch_related("images")
+        Product.objects.annotate(
+            # average_rating=Avg("reviews__rating"),
+            average_rating=Coalesce(Avg("reviews__rating"), 0.0),
+            reviews_count=Count("reviews")
+        )
+        .select_related("category")
+        .prefetch_related("images")
     )
     serializer_class = ProductDetailSerializer
     permission_classes = [IsAdminOrReadOnly]
@@ -787,9 +892,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    filterset_fields = ["category", "price"]
+    # filterset_fields = {
+    #     "category": ["exact"],
+    #     "price": ["exact", "lt", "lte", "gt", "gte"],
+    # }
+    filterset_class = ProductFilter
     search_fields = ["name", "description"]
-    ordering_fields = ["price", "created_at"]
+    ordering_fields = ["price", "created_at", "average_rating", "reviews_count"]
     ordering = ["-created_at"]
     pagination_class = ProductPagination
 
@@ -799,10 +908,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         return ProductDetailSerializer
 
     @swagger_auto_schema(
-        operation_summary="Retrieve a product with paginated images",
+        operation_summary="Retrieve a product by ID",
         operation_description=(
             "Fetch a single product by ID and "
-            "include paginated images in the response."
         ),
         tags=["Products"],
         responses={200: ProductDetailSerializer},
@@ -811,17 +919,6 @@ class ProductViewSet(viewsets.ModelViewSet):
         product = self.get_object()
         product_data = self.get_serializer(product).data
 
-        images = product.images.all()
-        paginator = ProductImagePagination()
-        paginated_images = paginator.paginate_queryset(images, request)
-        image_serializer = ProductImageSerializer(
-            paginated_images, many=True, context={"request": request}
-        )
-        paginated_response = paginator.get_paginated_response(
-            image_serializer.data
-        )
-
-        product_data["images"] = paginated_response.data
         return Response(product_data)
 
     @swagger_auto_schema(
@@ -1003,6 +1100,21 @@ class ProductImageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     pagination_class = ProductImagePagination
     parser_classes = (MultiPartParser, FormParser)
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = {"product": ["exact"]}
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]
+
+    def get_permissions(self):
+        """
+        Allow anyone to list or retrieve product images.
+        Only admin users can create, update, partial_update or destroy.
+        """
+        # AllowAny for read actions
+        if getattr(self, 'action', None) in ("list", "retrieve"):
+            return [permissions.AllowAny()]
+        # Default to admin-only for other actions
+        return [IsAdminUser()]
 
     @swagger_auto_schema(
         operation_summary="List all product images",
@@ -1071,6 +1183,93 @@ class ProductImageViewSet(viewsets.ModelViewSet):
         responses={204: "No Content"},
     )
     def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for product reviews.
+    - Anyone can list and retrieve reviews.
+    - Authenticated users can create reviews (user will be set to request.user).
+    - Only the review owner or staff can update or delete a review.
+    Supports optional filtering by `product` query parameter.
+    """
+
+    queryset = Review.objects.all().select_related("product", "user")
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    pagination_class = ReviewPagination
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = {"product": ["exact"], "rating": ["exact", "gte", "lte"]}
+    ordering_fields = ["created_at", "rating"]
+    ordering = ["-created_at"]
+
+    @swagger_auto_schema(
+        operation_summary="List all reviews",
+        operation_description=(
+            "Retrieve a paginated list of product reviews. "
+            "Supports filtering by product and rating."
+        ),
+        tags=["Reviews"],
+        responses={200: ReviewSerializer(many=True)},
+    )
+    def get_queryset(self):
+        qs = super().get_queryset()
+        product = self.request.query_params.get("product")
+        if product:
+            qs = qs.filter(product__product_id=product) if "-" in product else qs.filter(product=product)
+        return qs
+
+    @swagger_auto_schema(
+        operation_summary="Create a new review",
+        operation_description=(
+            "Create a new review for a product. "
+            "The authenticated user will be set as the review author."
+        ),
+        tags=["Reviews"],
+        request_body=ReviewSerializer,
+        responses={201: ReviewSerializer},
+    )
+    def perform_create(self, serializer):
+        # Ensure the authenticated user is recorded as the review author.
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(user=user)
+
+    @swagger_auto_schema(
+        operation_summary="Update an existing review",
+        operation_description=(
+            "Update a review by its ID. "
+            "Only the review owner or staff can perform this action."
+        ),
+        tags=["Reviews"],
+        request_body=ReviewSerializer,
+        responses={200: ReviewSerializer},
+    )
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        user = self.request.user
+        if instance.user and instance.user != user and not user.is_staff:
+            raise PermissionDenied("You do not have permission to modify this review.")
+        if not instance.user and not user.is_staff:
+            raise PermissionDenied("Only staff can modify anonymous reviews.")
+        serializer.save()
+
+    @swagger_auto_schema(
+        operation_summary="Delete a review",
+        operation_description=(
+            "Delete a review by its ID. "
+            "Only the review owner or staff can perform this action."
+        ),
+        tags=["Reviews"],
+        responses={204: "No Content"},
+    )
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        user = request.user
+        if instance.user and instance.user != user and not user.is_staff:
+            raise PermissionDenied("You do not have permission to delete this review.")
+        if not instance.user and not user.is_staff:
+            raise PermissionDenied("Only staff can delete anonymous reviews.")
         return super().destroy(request, *args, **kwargs)
 
 

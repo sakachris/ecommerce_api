@@ -100,3 +100,34 @@ class ProductImagePagination(PageNumberPagination):
                 "results": data,
             }
         )
+
+class ReviewPagination(PageNumberPagination):
+    page_size = settings.REVIEW_PAGE_SIZE
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+    def get_paginated_response(self, data):
+        request = self.request
+        last_page = self.page.paginator.num_pages
+
+        return Response(
+            {
+                "meta": {
+                    "page": self.page.number,
+                    "pages": last_page,
+                    "total_count": self.page.paginator.count,
+                    "page_count": len(data),
+                    "first_page": replace_query_param(
+                        request.build_absolute_uri(), self.page_query_param, 1
+                    ),
+                    "last_page": replace_query_param(
+                        request.build_absolute_uri(),
+                        self.page_query_param,
+                        last_page
+                    ),
+                    "next": self.get_next_link(),
+                    "previous": self.get_previous_link(),
+                },
+                "results": data,
+            }
+        )
