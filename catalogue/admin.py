@@ -21,6 +21,7 @@ class UserAdmin(BaseUserAdmin):
     """
     ordering = ('-created_at',)
     list_display = (
+        'user_id',
         'email',
         'first_name',
         'last_name',
