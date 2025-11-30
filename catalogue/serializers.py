@@ -352,7 +352,9 @@ class ReviewSerializer(serializers.ModelSerializer):
       per product.
     """
     product_name = serializers.CharField(source="product.name", read_only=True)
-    user_email = serializers.CharField(source="user.email", read_only=True)
+    # user_email = serializers.CharField(source="user.email", read_only=True)
+    user_first_name = serializers.CharField(source="user.first_name", read_only=True)
+    user_last_name = serializers.CharField(source="user.last_name", read_only=True)
 
     class Meta:
         model = Review
@@ -361,7 +363,9 @@ class ReviewSerializer(serializers.ModelSerializer):
             "product",
             "product_name",
             "user",
-            "user_email",
+            # "user_email",
+            "user_first_name",
+            "user_last_name",
             "rating",
             "comment",
             "created_at",
@@ -372,7 +376,9 @@ class ReviewSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "product_name",
-            "user_email",
+            # "user_email",
+            "user_first_name",
+            "user_last_name",
         ]
 
     def validate_rating(self, value):
